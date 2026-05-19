@@ -1,65 +1,62 @@
 # OpenToken
 
-Token-saving companion for OpenCode. Intercepts, filters, and compresses tool outputs before they reach the model — drastically reducing context window usage.
+Token-saving companion for OpenCode. **15-layer compression pipeline** that intercepts, filters, and compresses tool outputs before they reach the model.
 
-**Target: 70-90% token reduction on tool outputs.**
+**Target: 70-95% token reduction on tool outputs.**
 
-## How It Works
+## Architecture
 
 ```
-OpenCode tool call → opentoken intercept → filter/compress → model sees clean output
+OpenCode tool call → [15 layers] → model sees clean output
 ```
 
-OpenToken hooks into OpenCode's `tool.execute.after` event and applies specialized filters:
+### The 15 Layers
 
-| Tool | Filter | Savings |
-|------|--------|---------|
-| `bash` (git) | Changed files only, diff hunks, log summary | 90%+ |
-| `bash` (npm) | Install summary, test failures only | 80%+ |
-| `bash` (cargo) | Errors/warnings only, test failures | 75%+ |
-| `bash` (test) | Failure details + summary, skip passing | 80%+ |
-| `bash` (fs) | Noise dir removal, grouped output | 50%+ |
-| `read` (source) | Symbol outline (classes/fns only) | 60-80% |
-| `read` (short) | Pass through unchanged | 0% |
-| `grep` | Dedup, trim to match + context | 70%+ |
-| `glob` | Strip node_modules/.git/dist noise | 50%+ |
+| # | Layer | Technique | Savings |
+|---|-------|-----------|---------|
+| L1 | Command rewrite | `npm install` → `npm install --silent`, `curl` → `curl -s`, 14+ patterns | 10-30% |
+| L2 | Block minified | Skip `.min.js`, `dist/`, `node_modules/`, bundled files | 5-15% |
+| L3 | Size caps | Block writes >100KB, edits >50KB | prevents waste |
+| L4 | Subagent budget | Read byte limits, call count caps per subagent | 20-40% |
+| L5 | Family filters | Bash output by family (git/npm/cargo/test/fs) | 60-90% |
+| L6 | Tool compression | Read outlines, grep dedup, glob noise removal | 50-80% |
+| L7 | Binary detect | NUL byte scan, suppress binary output | 100% on binary |
+| L8 | Output block | Suppress >500KB entirely | prevents overflow |
+| L9 | Strip thinking | Remove `<antThinking>`, `<reasoning>` blocks | 5-20% |
+| L10 | Whitespace cleanup | Strip nulls, empties, timestamps, IDs, hashes | 10-30% |
+| L11 | Key aliasing | `description`→`desc`, `configuration`→`config` | 5-15% |
+| L12 | Cross-call dedup | Same output within 16 calls → collapse to ref | 100% on dupes |
+| L13 | Progressive disclosure | >200 lines → offload to temp file + pointer | 80-95% |
+| L14 | Auto-escalation | 50%→lean, 70%→ultra, 85%→ceiling ratchet | adaptive |
+| L15 | Session memory | Prev session summary + cache-lock skip | ~300 tok/session |
 
 ## Safety Guarantees
 
-- **Short outputs** (<200 lines / <50KB) → pass through unchanged
-- **Errors/failures** → never modified, always preserved in full
-- **Secrets** → redacted BEFORE any filtering (33+ patterns)
-- **Fallback** → if filtered ≥ original, return original
-- **UTF-8 safe** → never truncate mid-character
+| Rule | Behavior |
+|------|----------|
+| Short outputs | <200 lines or <50KB → pass through unchanged |
+| Errors/failures | Never modified, always preserved in full |
+| Secrets | Redacted BEFORE any filtering (33+ patterns) |
+| Fallback | If filtered ≥ original → return original |
+| UTF-8 safe | Never truncate mid-character |
+| Binary | Detected and suppressed, not passed to model |
 
 ## Install
 
 ### Global (recommended)
 
 ```bash
-# Clone the repo
-git clone https://github.com/YOUR_USERNAME/opentoken.git
+git clone https://github.com/MrGray17/opentoken.git
 cd opentoken
-
-# Install dependencies
 bun install
 
 # Copy to global opencode plugins directory
 cp -r src ~/.config/opencode/plugins/opentoken
 ```
 
-Or add to your `opencode.json`:
-
-```json
-{
-  "plugin": ["opentoken"]
-}
-```
-
 ### Per-project
 
 ```bash
-# Copy to project's .opencode directory
 cp -r src /your/project/.opencode/plugins/opentoken
 ```
 
@@ -74,25 +71,28 @@ Create `~/.config/opentoken/config.json`:
   "cache_ttl_seconds": 30,
   "max_lines_short_output": 200,
   "max_bytes_short_output": 51200,
+  "subagent_max_read_kb": 10,
+  "subagent_max_calls": 25,
+  "write_max_kb": 100,
+  "edit_max_kb": 50,
+  "output_max_kb": 500,
+  "dedup_window": 16,
+  "offload_max_lines": 200,
   "noise_dirs": ["node_modules", ".git", "dist", "build", ".cache"]
 }
 ```
 
 ## Metrics
 
-Track your token savings:
+Token savings tracked in `~/.config/opentoken/metrics.jsonl`:
 
-```bash
-# View stats (when stats command is implemented)
-opentoken stats
-opentoken stats --period today
-opentoken stats --period week
-opentoken stats --json
+```json
+{"ts":"2026-05-19T...","tool":"bash","family":"git","before_tokens":12000,"after_tokens":800,"saved_pct":93}
 ```
 
-## Build Plan
+## Roadmap
 
-See [BUILD_PLAN.md](BUILD_PLAN.md) for the full architecture and development roadmap.
+See [TO-DO.md](TO-DO.md) for Phase 2 (medium) and Phase 3 (advanced) techniques.
 
 ## License
 
