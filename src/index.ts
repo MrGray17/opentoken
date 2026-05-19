@@ -22,6 +22,7 @@ import {
   trackGitEvent,
   trackToolCall,
   trackTokensSaved,
+  getSessionTracker,
 } from "./session"
 import { detectFamily } from "./families/detect"
 import { filterGitOutput } from "./families/git"
@@ -48,6 +49,7 @@ import { analyzeContent, getCompressionPipeline } from "./router"
 import { smartAnalysis, executeSandbox } from "./sandbox"
 import { findSymbol, findSymbolFuzzy, getFunctionSource, indexDirectory, loadIndex, getIndexStats } from "./symbolindex"
 import { shouldBlockGrep, shouldBlockGlob, shouldBlockShellGrep, shouldAllowRead, trackLSPUsage, resetLSPState } from "./lspfirst"
+import { generateStatusLine, generateSessionSummary, resetStatusLine } from "./statusline"
 
 interface ToolInput {
   tool: string
@@ -343,6 +345,7 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
       resetDedup()
       resetEscalation()
       resetLSPState(directory)
+      resetStatusLine()
       await cleanupOffloaded()
       await cleanupRewind()
 
@@ -352,8 +355,10 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
       }).catch(() => {})
     },
 
-    // Session end — save memory
+    // Session end — save memory + show summary
     "session.deleted": async () => {
+      const sessionTracker = getSessionTracker()
+      console.log(generateSessionSummary(sessionTracker.tokensSaved, sessionTracker.toolCalls))
       await finalizeSession(directory)
     },
 
@@ -461,6 +466,13 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
           after_tokens: afterTokens,
           saved_pct: Math.round((saved / beforeTokens) * 100),
         })
+
+        // Inject cute status line
+        const sessionTracker = getSessionTracker()
+        const status = generateStatusLine(saved, beforeTokens, sessionTracker.tokensSaved)
+        if (status) {
+          filtered += status.text
+        }
       }
 
       output.result = filtered

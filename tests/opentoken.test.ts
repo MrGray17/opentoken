@@ -32,6 +32,7 @@ import { analyzeContent, getCompressionPipeline, quickTypeDetect } from "../src/
 import { smartAnalysis, executeSandbox } from "../src/sandbox"
 import { findSymbol, findSymbolFuzzy, indexFile, getIndexStats } from "../src/symbolindex"
 import { shouldBlockGrep, shouldBlockGlob, shouldBlockShellGrep } from "../src/lspfirst"
+import { generateStatusLine, generateSessionSummary, resetStatusLine } from "../src/statusline"
 
 // ─── PHASE 1 TESTS ───
 
@@ -580,5 +581,44 @@ describe("Post-Call Process", () => {
     const input = "\0\0\0\0\0\0\0\0\0\0"
     const result = postCallProcess(input)
     expect(result).toContain("Binary")
+  })
+})
+
+describe("Status Line", () => {
+  it("generates status line for high savings", () => {
+    resetStatusLine()
+    // Status line shows every 3rd call
+    generateStatusLine(5000, 10000, 15000) // call 1
+    generateStatusLine(5000, 10000, 20000) // call 2
+    const status = generateStatusLine(5000, 10000, 25000) // call 3
+    expect(status).not.toBeNull()
+    expect(status?.text).toContain("tokens")
+    expect(status?.text).toMatch(/[✨🌟💎🦋🌺🌸🍃🌙]/)
+  })
+  it("skips status line for low savings", () => {
+    resetStatusLine()
+    const status = generateStatusLine(50, 1000, 100)
+    expect(status).toBeNull()
+  })
+  it("shows every 3rd call", () => {
+    resetStatusLine()
+    const s1 = generateStatusLine(5000, 10000, 15000) // call 1
+    const s2 = generateStatusLine(5000, 10000, 20000) // call 2
+    const s3 = generateStatusLine(5000, 10000, 25000) // call 3
+    const s4 = generateStatusLine(5000, 10000, 30000) // call 4
+    const s5 = generateStatusLine(5000, 10000, 35000) // call 5
+    const s6 = generateStatusLine(5000, 10000, 40000) // call 6
+    expect(s1).toBeNull()
+    expect(s2).toBeNull()
+    expect(s3).not.toBeNull()
+    expect(s4).toBeNull()
+    expect(s5).toBeNull()
+    expect(s6).not.toBeNull()
+  })
+  it("generates session summary", () => {
+    const summary = generateSessionSummary(50000, 25)
+    expect(summary).toContain("tokens")
+    expect(summary).toContain("calls")
+    expect(summary).toMatch(/[✨🌟💎🦋🌺🌸🍃🌙]/)
   })
 })
