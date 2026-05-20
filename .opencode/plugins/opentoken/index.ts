@@ -596,12 +596,8 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
             }), undefined)
           }
 
-          // Inject status line
+          // Record metrics (don't inject status line into LLM output — TUI bar handles display)
           const sessionTracker = getSessionTracker()
-          const status = generateStatusLine(saved, beforeTokens, sessionTracker.tokensSaved)
-          if (status) {
-            filtered += status.text
-          }
         }
 
         output.output = filtered
