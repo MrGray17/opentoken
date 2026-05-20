@@ -5,6 +5,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
 import path from "path"
 import os from "os"
+import fs from "fs"
 
 // Phase 1 imports
 import { preCallFilter } from "./precall"
@@ -463,7 +464,9 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
       // Write session start time for TUI plugin to read
       try {
         const sessionStartFile = path.join(os.homedir(), ".config", "opentoken", "session-start.json")
-        await Bun.write(sessionStartFile, JSON.stringify({ ts: Date.now() }))
+        const tmp = sessionStartFile + ".tmp"
+        await Bun.write(tmp, JSON.stringify({ sessionStart: Date.now() }))
+        fs.renameSync(tmp, sessionStartFile)
       } catch {
         // Silent fail — TUI will fall back to component mount time
       }

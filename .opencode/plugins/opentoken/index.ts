@@ -5,6 +5,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
 import path from "path"
 import os from "os"
+import fs from "fs"
 
 // Phase 1 imports
 import { preCallFilter } from "./precall"
@@ -437,6 +438,8 @@ async function applyGlobFilter(output: string): Promise<string> {
 
 // ─── MAIN PLUGIN ───
 
+const SESSION_START_FILE = path.join(os.homedir(), ".config", "opentoken", "session-start.json")
+
 export const OpenTokenPlugin: Plugin = async ({ directory }) => {
   console.error("[OpenToken] Plugin loading...")
   await loadConfig(directory)
@@ -453,6 +456,11 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
     // Session start — inject memory, reset state
     "session.created": async () => {
       console.error("[OpenToken] Session started — compression active")
+      try {
+        const tmp = SESSION_START_FILE + ".tmp"
+        await Bun.write(tmp, JSON.stringify({ sessionStart: Date.now() }))
+        fs.renameSync(tmp, SESSION_START_FILE)
+      } catch { /* ignore */ }
       resetDedup()
       resetEscalation()
       resetLSPState(directory)
@@ -599,11 +607,24 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
             await safeStageAsync("saveStatsSummary", () => saveStatsSummary(), undefined)
           }
 
-          await safeStageAsync("writeSessionState", () => writeSessionState(directory), undefined)
-
           // Record metrics (don't inject status line into LLM output — TUI bar handles display)
           const sessionTracker = getSessionTracker()
         }
+
+        // Ensure session-start.json exists (fallback if session.created didn't fire)
+        // Must run outside if (saved > 0) so it works even when first calls save nothing
+        const startFile = path.join(os.homedir(), ".config", "opentoken", "session-start.json")
+        try {
+          const f = Bun.file(startFile)
+          if (!(await f.exists())) {
+            const tmp = startFile + ".tmp"
+            await Bun.write(tmp, JSON.stringify({ sessionStart: Date.now() }))
+            fs.renameSync(tmp, startFile)
+          }
+        } catch { /* ignore */ }
+
+        // Write session state after every call so TUI gets fresh compression level
+        await safeStageAsync("writeSessionState", () => writeSessionState(directory, getCompressionLevel()), undefined)
 
         output.output = filtered
 

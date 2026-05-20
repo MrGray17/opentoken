@@ -18,6 +18,7 @@ interface SessionSummary {
   decisions: string[]
   toolCalls: number
   tokensSaved: number
+  compressionLevel: string
 }
 
 // #38: Session memory — save current session summary
@@ -39,6 +40,7 @@ export async function saveSessionSummary(summary: Partial<SessionSummary>): Prom
       decisions: summary.decisions ?? existing?.decisions ?? [],
       toolCalls: summary.toolCalls ?? existing?.toolCalls ?? 0,
       tokensSaved: summary.tokensSaved ?? existing?.tokensSaved ?? 0,
+      compressionLevel: summary.compressionLevel ?? existing?.compressionLevel ?? "lean",
     }
 
     const tempFile = `${SESSION_FILE}.tmp`
@@ -148,7 +150,7 @@ export function resetSessionTracker(): void {
 
 // Write current session state to disk (called after each tool call)
 // The TUI reads this file as a primary/fallback data source
-export async function writeSessionState(project?: string): Promise<void> {
+export async function writeSessionState(project?: string, compressionLevel?: string): Promise<void> {
   const summary: SessionSummary = {
     timestamp: Date.now(),
     project: project ?? "unknown",
@@ -159,6 +161,7 @@ export async function writeSessionState(project?: string): Promise<void> {
     decisions: [],
     toolCalls: tracker.toolCalls,
     tokensSaved: tracker.tokensSaved,
+    compressionLevel: compressionLevel ?? "lean",
   }
 
   try {

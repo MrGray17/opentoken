@@ -8,6 +8,7 @@ import os from "os"
 
 const METRICS_DIR = path.join(os.homedir(), ".config", "opentoken")
 const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl")
+const SESSION_START_FILE = path.join(METRICS_DIR, "session-start.json")
 
 function formatTokens(n: number): string {
   if (n < 1000) return `${n}`
@@ -39,17 +40,30 @@ interface StatusBarState {
 // Read metrics.jsonl directly — always fresh, updated after every tool call
 async function readSessionMetrics(): Promise<{ tokensSaved: number; toolCalls: number } | null> {
   try {
+    // Read session start timestamp
+    let sessionStart = 0
+    try {
+      const startFile = Bun.file(SESSION_START_FILE)
+      if (await startFile.exists()) {
+        const data = JSON.parse(await startFile.text())
+        sessionStart = data.sessionStart || 0
+      }
+    } catch { /* ignore */ }
+
     const file = Bun.file(METRICS_FILE)
     if (!(await file.exists())) return null
     const text = await file.text()
     const lines = text.trim().split("\n").filter((l) => l.trim())
-    // Read last 50 entries to cover the current session
-    const recent = lines.slice(-50)
     let totalSaved = 0
     let totalCalls = 0
-    for (const line of recent) {
+    for (const line of lines) {
       try {
         const entry = JSON.parse(line)
+        // Only count entries from current session
+        if (sessionStart > 0 && entry.ts) {
+          const entryTime = new Date(entry.ts).getTime()
+          if (entryTime < sessionStart) continue
+        }
         totalSaved += (entry.before_tokens || 0) - (entry.after_tokens || 0)
         totalCalls++
       } catch { /* skip malformed lines */ }
@@ -66,7 +80,7 @@ function StatusBarWidget(props: { theme: TuiTheme; getMetrics: () => { isStreami
   const [state, setState] = createSignal<StatusBarState>({
     tokensSaved: 0,
     toolCalls: 0,
-    compressionLevel: "off",
+    compressionLevel: "lean",
     sessionStart: null,
     isStreaming: false,
   })
@@ -77,10 +91,20 @@ function StatusBarWidget(props: { theme: TuiTheme; getMetrics: () => { isStreami
   async function loadMetrics() {
     const metrics = await readSessionMetrics()
 
+    let compressionLevel = "lean"
+    try {
+      const sessionFile = Bun.file(path.join(METRICS_DIR, "session-memory.json"))
+      if (await sessionFile.exists()) {
+        const data = JSON.parse(await sessionFile.text())
+        if (data.compressionLevel) compressionLevel = data.compressionLevel
+      }
+    } catch { /* ignore */ }
+
     setState((prev) => ({
       ...prev,
       tokensSaved: metrics?.tokensSaved ?? prev.tokensSaved,
       toolCalls: metrics?.toolCalls ?? prev.toolCalls,
+      compressionLevel,
     }))
   }
 
