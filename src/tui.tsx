@@ -29,62 +29,45 @@ function formatDuration(ms: number): string {
 
 function StatusBarWidget(props: { theme: TuiTheme }) {
   const [display, setDisplay] = createSignal("")
-  const [sessionStart, setSessionStart] = createSignal<number>(Date.now())
+  const sessionStart = Date.now()
 
   let metricsInterval: ReturnType<typeof setInterval>
 
-  async function getSessionStartTime(): Promise<number> {
-    try {
-      const file = Bun.file(path.join(METRICS_DIR, "session-start.json"))
-      if (await file.exists()) {
-        const data = JSON.parse(await file.text())
-        return data.ts ?? Date.now()
-      }
-    } catch { /* fall through */ }
-    return Date.now()
-  }
-
   async function loadMetrics() {
-    // Get session start time from file (set by server plugin on session.created)
-    const start = await getSessionStartTime()
-    setSessionStart(start)
-
     try {
       const file = Bun.file(METRICS_FILE)
       if (await file.exists()) {
         const text = await file.text()
         const lines = text.trim().split("\n").filter((l) => l.trim())
-        const recent = lines.slice(-50)
+        // Read last 20 entries for current session
+        const recent = lines.slice(-20)
         let totalSaved = 0
         let totalCalls = 0
 
         for (const line of recent) {
           try {
             const entry = JSON.parse(line)
-            const entryTs = new Date(entry.ts).getTime()
-            if (entryTs >= start) {
-              totalSaved += (entry.before_tokens || 0) - (entry.after_tokens || 0)
-              totalCalls++
-            }
+            totalSaved += (entry.before_tokens || 0) - (entry.after_tokens || 0)
+            totalCalls++
           } catch { /* skip */ }
         }
 
         const time = formatTime(new Date())
-        const duration = formatDuration(Date.now() - start)
+        const duration = formatDuration(Date.now() - sessionStart)
 
         if (totalSaved > 0) {
-          setDisplay(` opentoken  saved ${formatTokens(totalSaved)} tokens  ${totalCalls} calls  ${duration}  ${time}`)
+          setDisplay(`🌸 opentoken  saved ${formatTokens(totalSaved)} tokens  ${totalCalls} calls  ${duration}  ${time}`)
         } else {
-          setDisplay(` opentoken  ready  ${duration}  ${time}`)
+          setDisplay(`🌸 opentoken  ready  ${duration}  ${time}`)
         }
         return
       }
     } catch { /* fall through */ }
 
-    // Fallback: just show time and duration
+    // Fallback
     const time = formatTime(new Date())
-    const duration = formatDuration(Date.now() - sessionStart())
-    setDisplay(` opentoken  ready  ${duration}  ${time}`)
+    const duration = formatDuration(Date.now() - sessionStart)
+    setDisplay(`🌸 opentoken  ready  ${duration}  ${time}`)
   }
 
   onMount(() => {
