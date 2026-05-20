@@ -7,8 +7,7 @@ import path from "path"
 import os from "os"
 
 const METRICS_DIR = path.join(os.homedir(), ".config", "opentoken")
-const SESSION_FILE = path.join(METRICS_DIR, "session-memory.json")
-const SUMMARY_FILE = path.join(METRICS_DIR, "stats-summary.json")
+const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl")
 
 function formatTokens(n: number): string {
   if (n < 1000) return `${n}`
@@ -37,34 +36,30 @@ interface StatusBarState {
   isStreaming: boolean
 }
 
-async function readSessionMemory(): Promise<{ tokensSaved: number; toolCalls: number } | null> {
+// Read metrics.jsonl directly — always fresh, updated after every tool call
+async function readSessionMetrics(): Promise<{ tokensSaved: number; toolCalls: number } | null> {
   try {
-    const file = Bun.file(SESSION_FILE)
-    if (await file.exists()) {
-      const data = JSON.parse(await file.text())
-      return { tokensSaved: data.tokensSaved ?? 0, toolCalls: data.toolCalls ?? 0 }
+    const file = Bun.file(METRICS_FILE)
+    if (!(await file.exists())) return null
+    const text = await file.text()
+    const lines = text.trim().split("\n").filter((l) => l.trim())
+    // Read last 50 entries to cover the current session
+    const recent = lines.slice(-50)
+    let totalSaved = 0
+    let totalCalls = 0
+    for (const line of recent) {
+      try {
+        const entry = JSON.parse(line)
+        totalSaved += (entry.before_tokens || 0) - (entry.after_tokens || 0)
+        totalCalls++
+      } catch { /* skip malformed lines */ }
     }
+    return { tokensSaved: Math.max(0, totalSaved), toolCalls: totalCalls }
   } catch {
-    // ignore
+    return null
   }
-  return null
 }
 
-async function readStatsSummary(): Promise<{ totalSavedTokens: number; totalCalls: number } | null> {
-  try {
-    const file = Bun.file(SUMMARY_FILE)
-    if (await file.exists()) {
-      const data = JSON.parse(await file.text())
-      return {
-        totalSavedTokens: data.session?.totalSavedTokens ?? 0,
-        totalCalls: data.session?.totalCalls ?? 0,
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return null
-}
 
 function StatusBarWidget(props: { theme: TuiTheme; getMetrics: () => { isStreaming: boolean; isComplete: boolean } | null }) {
   const [time, setTime] = createSignal(formatTime(new Date()))
@@ -80,23 +75,24 @@ function StatusBarWidget(props: { theme: TuiTheme; getMetrics: () => { isStreami
   let metricsInterval: ReturnType<typeof setInterval>
 
   async function loadMetrics() {
-    const session = await readSessionMemory()
-    const stats = await readStatsSummary()
+    const metrics = await readSessionMetrics()
 
     setState((prev) => ({
       ...prev,
-      tokensSaved: session?.tokensSaved ?? stats?.totalSavedTokens ?? prev.tokensSaved,
-      toolCalls: session?.toolCalls ?? stats?.totalCalls ?? prev.toolCalls,
+      tokensSaved: metrics?.tokensSaved ?? prev.tokensSaved,
+      toolCalls: metrics?.toolCalls ?? prev.toolCalls,
     }))
   }
 
   onMount(() => {
+    setState((prev) => ({ ...prev, sessionStart: Date.now() }))
+
     clockInterval = setInterval(() => {
       setTime(formatTime(new Date()))
     }, 1000)
 
     loadMetrics()
-    metricsInterval = setInterval(loadMetrics, 5000)
+    metricsInterval = setInterval(loadMetrics, 3000)
   })
 
   onCleanup(() => {
@@ -113,7 +109,7 @@ function StatusBarWidget(props: { theme: TuiTheme; getMetrics: () => { isStreami
   const duration = s.sessionStart ? formatDuration(Date.now() - s.sessionStart) : ""
 
   const leftText = s.tokensSaved > 0
-    ? `🌸 opentoken ${levelEmoji} saved ${formatTokens(s.tokensSaved)} tokens`
+    ? `🌸 opentoken ${levelEmoji} saved ${formatTokens(s.tokensSaved)} tokens  ${s.toolCalls} calls`
     : `🌸 opentoken ${levelEmoji} ready`
 
   const rightText = [duration, formatTime(new Date())].filter(Boolean).join("  ")

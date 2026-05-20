@@ -21,6 +21,7 @@ import {
   trackToolCall,
   trackTokensSaved,
   getSessionTracker,
+  writeSessionState,
 } from "./session"
 import { detectFamily } from "./families/detect"
 import { filterGitOutput } from "./families/git"
@@ -602,9 +603,13 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
               after_tokens: afterTokens,
               saved_pct: Math.round((saved / beforeTokens) * 100),
             }), undefined)
+            // Keep stats-summary.json fresh for TUI and opentoken_stats command
+            await safeStageAsync("saveStatsSummary", () => saveStatsSummary(), undefined)
           }
 
-          // Record metrics (don't inject status line into LLM output — TUI bar handles display)
+          await safeStageAsync("writeSessionState", () => writeSessionState(directory), undefined)
+
+          // Don't inject status line into LLM output — TUI bar handles display
           const sessionTracker = getSessionTracker()
         }
 

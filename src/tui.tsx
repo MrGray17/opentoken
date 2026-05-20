@@ -39,8 +39,8 @@ function StatusBarWidget(props: { theme: TuiTheme }) {
       if (await file.exists()) {
         const text = await file.text()
         const lines = text.trim().split("\n").filter((l) => l.trim())
-        // Read last 20 entries for current session
-        const recent = lines.slice(-20)
+        // Read last 50 entries to cover the current session
+        const recent = lines.slice(-50)
         let totalSaved = 0
         let totalCalls = 0
 

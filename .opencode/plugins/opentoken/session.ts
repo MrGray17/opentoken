@@ -146,6 +146,30 @@ export function resetSessionTracker(): void {
   tracker.tokensSaved = 0
 }
 
+// Write current session state to disk (called after each tool call)
+// The TUI reads this file as a primary/fallback data source
+export async function writeSessionState(project?: string): Promise<void> {
+  const summary: SessionSummary = {
+    timestamp: Date.now(),
+    project: project ?? "unknown",
+    filesTouched: [...tracker.filesTouched],
+    errors: [...tracker.errors],
+    testResults: [],
+    gitEvents: [...tracker.gitEvents],
+    decisions: [],
+    toolCalls: tracker.toolCalls,
+    tokensSaved: tracker.tokensSaved,
+  }
+
+  try {
+    const tempFile = `${SESSION_FILE}.tmp`
+    await Bun.write(tempFile, JSON.stringify(summary, null, 2))
+    fs.renameSync(tempFile, SESSION_FILE)
+  } catch {
+    // Silent fail
+  }
+}
+
 // Build and save session summary at session end
 export async function finalizeSession(project: string): Promise<void> {
   await saveSessionSummary({
