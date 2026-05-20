@@ -17,39 +17,89 @@ OpenToken installs as an OpenCode plugin and hooks into the tool execution lifec
 | # | Layer | What It Does |
 |---|-------|-------------|
 | L1 | Command rewrite | Adds `--silent`, `--quiet`, `--oneline` to noisy commands |
-| L2 | Block minified | Skips reads of `.min.js`, `dist/`, `node_modules/` |
-| L3 | Size caps | Blocks writes >100KB, edits >50KB |
+| L2 | Block minified | Skips reads of `.min.js`, `dist/`, `node_modules/`, lock files |
+| L3 | Size caps | Blocks writes >50KB, edits >20KB |
+| L4 | Secret redaction | Redacts API keys, tokens, passwords (18 patterns, single regex) |
 | L5 | LSP-first | Blocks grep/glob for code symbols, suggests LSP tools |
 | L6 | Family filters | Specialized filters for git, npm, cargo, test, and fs output |
 | L7 | Tool compression | Read outlines, grep dedup, glob noise removal |
-| L8 | Binary detect | Suppresses binary output |
-| L9 | Output block | Suppresses output >500KB |
+| L8 | Binary detect | Suppresses binary output (64KB NUL scan) |
+| L9 | Output block | Suppresses output >100KB |
 | L10 | Strip thinking | Removes `<antThinking>`, `<reasoning>` blocks |
 | L11 | Whitespace cleanup | Strips nulls, empty values, timestamps |
 | L12 | Key aliasing | `description`→`desc`, `configuration`→`config` |
-| L13 | Cross-call dedup | Identical output within 16 calls → single reference |
-| L14 | Progressive disclosure | Large output → offload to temp file + summary pointer |
-| L15 | Auto-escalation | Compression intensity increases as context fills |
-| L16 | AST skeleton | Replaces full file reads with symbol outlines |
-| L17 | Diff folding | Collapses unchanged diff context lines |
-| L18 | Log folding | Collapses repeated consecutive log lines |
-| L19 | JSON sampling | Large JSON arrays → schema + representative samples |
-| L20 | Reversible compression | Aggressive compression with on-disk original store |
-| L21 | Content router | Detects content type, fires only relevant stages |
-| L23 | Symbol index | Background codebase indexing at session start |
-| L24 | Session memory | Injects previous session summary on restart |
+| L13 | URL shortening | Strips query params + hash from long URLs |
+| L14 | Base64 stripping | Replaces inline base64 content with placeholder |
+| L15 | Cross-call dedup | Identical output within 16 calls → single reference |
+| L16 | Progressive disclosure | Large output → offload to temp file + summary pointer |
+| L17 | Auto-escalation | Compression intensity increases as context fills |
+| L18 | AST skeleton | Replaces full file reads with symbol outlines |
+| L19 | Diff folding | Collapses unchanged diff context lines |
+| L20 | Log folding | Collapses repeated log lines (Python, K8s, syslog formats) |
+| L21 | JSON sampling | Large JSON arrays → schema + representative samples |
+| L22 | Reversible compression | Aggressive compression with on-disk original store |
+| L23 | Content router | Detects content type, fires only relevant stages |
+| L24 | Stack trace compression | Collapses middle stack frames, keeps top + bottom |
+| L25 | Symbol index | Background codebase indexing at session start |
+| L26 | Session memory | Injects previous session summary on restart |
 
 ## Safety Guarantees
 
 | Rule | Behavior |
 |------|----------|
-| Short outputs | <200 lines or <50KB → pass through unchanged |
+| Short outputs | <80 lines or <20KB → pass through unchanged |
 | Conservative | If filtered output ≥ original size → return original |
-| Secrets | Redacted BEFORE any filtering (33+ patterns) |
-| Binary | Detected and suppressed |
+| Secrets | Redacted BEFORE any filtering (18 patterns compiled to single regex) |
+| Binary | Detected and suppressed (64KB NUL byte scan) |
 | Graceful degradation | If any pipeline stage fails, it's skipped — the plugin never crashes your session |
 | Input validation | Tool names whitelisted, file paths validated against project root |
 | Size limits | 10MB hard limit on tool output (configurable) |
+
+## TUI Status Bar
+
+OpenToken includes a status bar that shows in the prompt area:
+
+```
+🌸 opentoken 🍃 saved 2.4K tokens   1h 23m  14:32
+```
+
+Shows: token savings, compression level emoji, session duration, and clock. Updates via session events + 5-second polling fallback.
+
+## Diagnostic Tools
+
+Two MCP tools are available for debugging:
+
+### `opentoken_stats`
+
+Shows token savings summary:
+
+```
+🌸 opentoken stats
+
+  Calls:        142
+  Tokens in:    48.2K
+  Tokens out:   3.1K
+  Tokens saved: 45.1K (94%)
+
+  By tool:
+    read           89 calls  saved  42.3K ( 96%)
+    bash           45 calls  saved   2.7K ( 72%)
+    grep            8 calls  saved    89 ( 45%)
+```
+
+### `opentoken_health`
+
+Shows plugin health — error counts, stage failures, config status:
+
+```
+🌸 opentoken health check
+
+  Total errors: 0
+  No errors recorded ✅
+
+  Config: metrics=true, symbols=true
+  Context: lean
+```
 
 ## Requirements
 
@@ -130,7 +180,9 @@ All state is stored in `~/.config/opentoken/`:
 
 | File | Purpose | Cleanup |
 |------|---------|---------|
-| `metrics.jsonl` | Per-call token savings | Append-only (grows over time) |
+| `metrics.jsonl` | Per-call token savings | Rotated at 10MB, keeps 5 files |
+| `error.jsonl` | Stage failure logs | Rotated at 5MB, keeps 3 files |
+| `stats-summary.json` | Aggregated stats summary | Overwritten on each `opentoken_stats` call |
 | `session-memory.json` | Previous session summary | Overwritten each session |
 | `offload/` | Progressive disclosure temp files | Auto-cleaned after 1 hour |
 | `rewind/` | Reversible compression store | Auto-cleaned after 1 hour |
@@ -144,7 +196,7 @@ OpenToken is designed with defense-in-depth:
 - **Input validation** — Tool names are whitelisted and sanitized
 - **Output size limits** — Prevents memory exhaustion from oversized tool outputs
 - **Graceful degradation** — Every pipeline stage is wrapped in error handling; a single failure never crashes the session
-- **Secret redaction** — Runs first in every pipeline, before any other processing (33+ patterns including API keys, tokens, passwords, private keys)
+- **Secret redaction** — Runs first in every pipeline, before any other processing (18 patterns compiled into a single alternation regex for performance)
 
 ## License
 

@@ -25,6 +25,7 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "exports": {
