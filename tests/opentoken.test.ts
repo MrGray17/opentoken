@@ -20,7 +20,6 @@ import { filterRead } from "../src/filters/read"
 import { filterGrep } from "../src/filters/grep"
 import { filterGlob } from "../src/filters/glob"
 import { redactSecrets } from "../src/utils/secrets"
-import { abbreviate } from "../src/utils/abbreviate"
 import { estimateTokens } from "../src/utils/tokens"
 
 // Phase 2 imports
@@ -29,7 +28,6 @@ import { foldDiff, foldLogs, foldDiffAndLogs } from "../src/folding"
 import { sampleJson } from "../src/jsonsample"
 import { applyReversibleCompression, cleanupRewind } from "../src/rewind"
 import { analyzeContent, getCompressionPipeline } from "../src/router"
-import { smartAnalysis, executeSandbox } from "../src/sandbox"
 import { indexDirectory, loadIndex } from "../src/symbolindex"
 import { shouldBlockGrep, shouldBlockGlob, shouldBlockShellGrep } from "../src/lspfirst"
 import { generateStatusLine, generateSessionSummary, resetStatusLine } from "../src/statusline"
@@ -329,20 +327,6 @@ describe("L0: Secret Redaction", () => {
   })
 })
 
-describe("L13: Abbreviations", () => {
-  it("abbreviates common words", () => {
-    const input = "The function configuration is very important"
-    const result = abbreviate(input)
-    expect(result).toContain("fn")
-    expect(result).toContain("config")
-  })
-  it("preserves code blocks", () => {
-    const input = "Use `function` in your code"
-    const result = abbreviate(input)
-    expect(result).toContain("`function`")
-  })
-})
-
 // ─── PHASE 2 TESTS ───
 
 describe("L16: AST Skeleton", () => {
@@ -476,22 +460,6 @@ describe("L21: Content Router", () => {
   })
 })
 
-describe("L22: Think-in-Code Sandbox", () => {
-  it("creates analysis scripts", () => {
-    const { script, description } = smartAnalysis("count functions in files", ["src/app.ts", "src/utils.ts"])
-    expect(script).toContain("grep")
-    expect(description).toContain("functions")
-  })
-  it("creates import scripts", () => {
-    const { script, description } = smartAnalysis("find all imports", ["src/app.ts"])
-    expect(script).toContain("import")
-  })
-  it("creates TODO scripts", () => {
-    const { script, description } = smartAnalysis("find TODOs", ["src/app.ts"])
-    expect(script).toContain("TODO")
-  })
-})
-
 describe("L23: Symbol Index", () => {
   it("extracts symbols from TypeScript content", async () => {
     const content = `import React from 'react'
@@ -520,24 +488,36 @@ export function createApp(): App {
 })
 
 describe("L5: LSP-First Enforcement", () => {
-  it("blocks grep for CamelCase symbols", () => {
+  it("allows grep for plain symbol names", () => {
     const result = shouldBlockGrep("UserService")
+    expect(result.blocked).toBe(false)
+  })
+  it("allows grep for snake_case text", () => {
+    const result = shouldBlockGrep("send_message")
+    expect(result.blocked).toBe(false)
+  })
+  it("blocks grep for class definitions", () => {
+    const result = shouldBlockGrep("class UserService")
     expect(result.blocked).toBe(true)
     expect(result.suggestion).toContain("LSP")
   })
-  it("blocks grep for snake_case symbols", () => {
-    const result = shouldBlockGrep("send_message")
+  it("blocks grep for function definitions", () => {
+    const result = shouldBlockGrep("def send_message")
     expect(result.blocked).toBe(true)
   })
   it("allows grep for text patterns", () => {
     const result = shouldBlockGrep("TODO")
     expect(result.blocked).toBe(false)
   })
-  it("blocks shell grep for symbols", () => {
+  it("allows shell grep for text", () => {
     const result = shouldBlockShellGrep("rg UserService src/")
+    expect(result.blocked).toBe(false)
+  })
+  it("blocks shell grep for definitions", () => {
+    const result = shouldBlockShellGrep('rg "class UserService" src/')
     expect(result.blocked).toBe(true)
   })
-  it("allows shell grep for text", () => {
+  it("allows shell grep for text patterns", () => {
     const result = shouldBlockShellGrep("grep -r 'TODO' src/")
     expect(result.blocked).toBe(false)
   })

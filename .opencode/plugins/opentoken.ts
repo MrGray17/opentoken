@@ -6,11 +6,11 @@ import path from "path"
 import os from "os"
 
 // Phase 1 imports
-import { preCallFilter } from "./precall"
-import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls } from "./postcall"
-import { deduplicate, resetDedup } from "./dedup"
-import { progressiveDisclosure, cleanupOffloaded } from "./progressive"
-import { applyAutoEscalation, updateContext, getCompressionLevel, resetEscalation } from "./autoescalate"
+import { preCallFilter } from "./opentoken/precall"
+import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls } from "./opentoken/postcall"
+import { deduplicate, resetDedup } from "./opentoken/dedup"
+import { progressiveDisclosure, cleanupOffloaded } from "./opentoken/progressive"
+import { applyAutoEscalation, updateContext, getCompressionLevel, resetEscalation } from "./opentoken/autoescalate"
 import {
   loadSessionSummary,
   finalizeSession,
@@ -20,31 +20,31 @@ import {
   trackToolCall,
   trackTokensSaved,
   getSessionTracker,
-} from "./session"
-import { detectFamily } from "./families/detect"
-import { filterGitOutput } from "./families/git"
-import { filterNpmOutput } from "./families/npm"
-import { filterCargoOutput } from "./families/cargo"
-import { filterTestOutput } from "./families/test"
-import { filterFsOutput } from "./families/fs"
-import { filterGeneric } from "./families/generic"
-import { filterRead } from "./filters/read"
-import { filterGrep } from "./filters/grep"
-import { filterGlob } from "./filters/glob"
-import { redactSecrets } from "./utils/secrets"
-import { estimateTokens } from "./utils/tokens"
-import { recordMetric } from "./utils/metrics"
-import { getCachedRead, setCachedRead } from "./utils/cache"
+} from "./opentoken/session"
+import { detectFamily } from "./opentoken/families/detect"
+import { filterGitOutput } from "./opentoken/families/git"
+import { filterNpmOutput } from "./opentoken/families/npm"
+import { filterCargoOutput } from "./opentoken/families/cargo"
+import { filterTestOutput } from "./opentoken/families/test"
+import { filterFsOutput } from "./opentoken/families/fs"
+import { filterGeneric } from "./opentoken/families/generic"
+import { filterRead } from "./opentoken/filters/read"
+import { filterGrep } from "./opentoken/filters/grep"
+import { filterGlob } from "./opentoken/filters/glob"
+import { redactSecrets } from "./opentoken/utils/secrets"
+import { estimateTokens } from "./opentoken/utils/tokens"
+import { recordMetric } from "./opentoken/utils/metrics"
+import { getCachedRead, setCachedRead } from "./opentoken/utils/cache"
 
 // Phase 2 imports
-import { extractSkeleton } from "./skeleton"
-import { foldDiffAndLogs } from "./folding"
-import { sampleJson } from "./jsonsample"
-import { applyReversibleCompression, cleanupRewind } from "./rewind"
-import { analyzeContent, getCompressionPipeline } from "./router"
-import { indexDirectory, loadIndex } from "./symbolindex"
-import { shouldBlockGrep, shouldBlockGlob, shouldBlockShellGrep, trackLSPUsage, resetLSPState } from "./lspfirst"
-import { generateStatusLine, generateSessionSummary, resetStatusLine } from "./statusline"
+import { extractSkeleton } from "./opentoken/skeleton"
+import { foldDiffAndLogs } from "./opentoken/folding"
+import { sampleJson } from "./opentoken/jsonsample"
+import { applyReversibleCompression, cleanupRewind } from "./opentoken/rewind"
+import { analyzeContent, getCompressionPipeline } from "./opentoken/router"
+import { indexDirectory, loadIndex } from "./opentoken/symbolindex"
+import { shouldBlockGrep, shouldBlockGlob, shouldBlockShellGrep, trackLSPUsage, resetLSPState } from "./opentoken/lspfirst"
+import { generateStatusLine, generateSessionSummary, resetStatusLine } from "./opentoken/statusline"
 
 // ─── CONFIGURATION ───
 
@@ -410,8 +410,9 @@ async function applyGlobFilter(output: string): Promise<string> {
 // ─── MAIN PLUGIN ───
 
 export const OpenTokenPlugin: Plugin = async ({ directory }) => {
-  // Load configuration
+  console.error("[OpenToken] Plugin loading...")
   await loadConfig(directory)
+  console.error(`[OpenToken] Loaded. Symbol index: ${config.enableSymbolIndex}, Metrics: ${config.enableMetrics}`)
 
   // L38: Load previous session memory
   await safeStageAsync("loadSessionSummary", () => loadSessionSummary(directory), null)
@@ -423,6 +424,7 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
   return {
     // Session start — inject memory, reset state
     "session.created": async () => {
+      console.error("[OpenToken] Session started — compression active")
       resetDedup()
       resetEscalation()
       resetLSPState(directory)

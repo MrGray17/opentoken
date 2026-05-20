@@ -58,6 +58,21 @@ OpenToken installs as an OpenCode plugin and hooks into the tool execution lifec
 
 ## Install
 
+### Via curl (recommended)
+
+One-liner — downloads directly into your OpenCode plugin directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MrGray17/opentoken/refs/heads/main/install.sh | bash
+```
+
+Or manually:
+
+```bash
+mkdir -p ~/.config/opencode/plugins/opentoken
+curl -fsSL https://github.com/MrGray17/opentoken/archive/refs/heads/main.tar.gz | tar xz --strip-components=1 -C ~/.config/opencode/plugins/opentoken
+```
+
 ### Via npm
 
 ```bash
@@ -68,11 +83,7 @@ Then add to your OpenCode config:
 
 ```json
 {
-  "plugins": {
-    "opentoken": {
-      "path": "node_modules/opentoken/src/index.ts"
-    }
-  }
+  "plugin": ["opentoken"]
 }
 ```
 
@@ -85,7 +96,8 @@ npm install github:MrGray17/opentoken
 ### Per-project (local copy)
 
 ```bash
-cp -r node_modules/opentoken/src /your/project/.opencode/plugins/opentoken
+mkdir -p .opencode/plugins
+cp -r node_modules/opentoken/src .opencode/plugins/opentoken
 ```
 
 ## Configuration
