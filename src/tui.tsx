@@ -29,11 +29,26 @@ function formatDuration(ms: number): string {
 
 function StatusBarWidget(props: { theme: TuiTheme }) {
   const [display, setDisplay] = createSignal("")
-  const sessionStart = Date.now()
+  const [sessionStart, setSessionStart] = createSignal<number>(Date.now())
 
   let metricsInterval: ReturnType<typeof setInterval>
 
+  async function getSessionStartTime(): Promise<number> {
+    try {
+      const file = Bun.file(path.join(METRICS_DIR, "session-start.json"))
+      if (await file.exists()) {
+        const data = JSON.parse(await file.text())
+        return data.ts ?? Date.now()
+      }
+    } catch { /* fall through */ }
+    return Date.now()
+  }
+
   async function loadMetrics() {
+    // Get session start time from file (set by server plugin on session.created)
+    const start = await getSessionStartTime()
+    setSessionStart(start)
+
     try {
       const file = Bun.file(METRICS_FILE)
       if (await file.exists()) {
@@ -46,13 +61,16 @@ function StatusBarWidget(props: { theme: TuiTheme }) {
         for (const line of recent) {
           try {
             const entry = JSON.parse(line)
-            totalSaved += (entry.before_tokens || 0) - (entry.after_tokens || 0)
-            totalCalls++
+            const entryTs = new Date(entry.ts).getTime()
+            if (entryTs >= start) {
+              totalSaved += (entry.before_tokens || 0) - (entry.after_tokens || 0)
+              totalCalls++
+            }
           } catch { /* skip */ }
         }
 
         const time = formatTime(new Date())
-        const duration = formatDuration(Date.now() - sessionStart)
+        const duration = formatDuration(Date.now() - start)
 
         if (totalSaved > 0) {
           setDisplay(` opentoken  saved ${formatTokens(totalSaved)} tokens  ${totalCalls} calls  ${duration}  ${time}`)
@@ -65,7 +83,7 @@ function StatusBarWidget(props: { theme: TuiTheme }) {
 
     // Fallback: just show time and duration
     const time = formatTime(new Date())
-    const duration = formatDuration(Date.now() - sessionStart)
+    const duration = formatDuration(Date.now() - sessionStart())
     setDisplay(` opentoken  ready  ${duration}  ${time}`)
   }
 

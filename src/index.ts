@@ -459,6 +459,14 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
       await safeStageAsync("cleanupOffloaded", () => cleanupOffloaded(), 0)
       await safeStageAsync("cleanupRewind", () => cleanupRewind(), 0)
 
+      // Write session start time for TUI plugin to read
+      try {
+        const sessionStartFile = path.join(os.homedir(), ".config", "opentoken", "session-start.json")
+        await Bun.write(sessionStartFile, JSON.stringify({ ts: Date.now() }))
+      } catch {
+        // Silent fail — TUI will fall back to component mount time
+      }
+
       if (config.enableSymbolIndex) {
         indexDirectory(directory).then((stats) => {
           console.log(`[OpenToken] Indexed ${stats.filesIndexed} files, ${stats.totalSymbols} symbols`)
