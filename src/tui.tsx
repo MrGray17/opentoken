@@ -7,8 +7,7 @@ import path from "path"
 import os from "os"
 
 const METRICS_DIR = path.join(os.homedir(), ".config", "opentoken")
-const SESSION_FILE = path.join(METRICS_DIR, "session-memory.json")
-const SUMMARY_FILE = path.join(METRICS_DIR, "stats-summary.json")
+const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl")
 
 function formatTokens(n: number): string {
   if (n < 1000) return `${n}`
@@ -29,64 +28,76 @@ function formatDuration(ms: number): string {
   return `${seconds}s`
 }
 
-async function readSessionMemory(): Promise<{ tokensSaved: number; toolCalls: number } | null> {
-  try {
-    const file = Bun.file(SESSION_FILE)
-    if (await file.exists()) {
-      const data = JSON.parse(await file.text())
-      return { tokensSaved: data.tokensSaved ?? 0, toolCalls: data.toolCalls ?? 0 }
-    }
-  } catch {
-    // ignore
-  }
-  return null
+interface MetricsResult {
+  tokensSaved: number
+  toolCalls: number
 }
 
-async function readStatsSummary(): Promise<{ totalSavedTokens: number; totalCalls: number } | null> {
+// Read only metrics from the current session (after sessionStart)
+async function readCurrentSessionMetrics(sessionStart: number): Promise<MetricsResult> {
   try {
-    const file = Bun.file(SUMMARY_FILE)
-    if (await file.exists()) {
-      const data = JSON.parse(await file.text())
-      return {
-        totalSavedTokens: data.session?.totalSavedTokens ?? 0,
-        totalCalls: data.session?.totalCalls ?? 0,
+    const file = Bun.file(METRICS_FILE)
+    if (!(await file.exists())) return { tokensSaved: 0, toolCalls: 0 }
+    const text = await file.text()
+    const lines = text.trim().split("\n").filter((l) => l.trim())
+    if (lines.length === 0) return { tokensSaved: 0, toolCalls: 0 }
+
+    let totalSaved = 0
+    let totalCalls = 0
+    const sessionStartMs = sessionStart
+
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line)
+        // Only count entries from current session
+        const entryTs = new Date(entry.ts).getTime()
+        if (entryTs >= sessionStartMs) {
+          totalSaved += entry.before_tokens - entry.after_tokens
+          totalCalls++
+        }
+      } catch {
+        // skip malformed
       }
     }
+
+    return { tokensSaved: totalSaved, toolCalls: totalCalls }
   } catch {
-    // ignore
+    return { tokensSaved: 0, toolCalls: 0 }
   }
-  return null
 }
 
-function StatusBarWidget(props: { theme: TuiTheme }) {
+function StatusBarWidget(props: { theme: TuiTheme; sessionStart: () => number | null }) {
   const [display, setDisplay] = createSignal("")
 
-  let clockInterval: ReturnType<typeof setInterval>
   let metricsInterval: ReturnType<typeof setInterval>
 
-  function buildDisplay(): string {
-    const tokensSaved = 0 // Will be updated by metrics polling
-    const time = formatTime(new Date())
-    return ` opentoken   ${time}`
-  }
-
   async function loadMetrics() {
-    const session = await readSessionMemory()
-    const stats = await readStatsSummary()
-    const saved = session?.tokensSaved ?? stats?.totalSavedTokens ?? 0
-    const time = formatTime(new Date())
+    const start = props.sessionStart()
+    if (!start) {
+      setDisplay(" opentoken")
+      return
+    }
 
-    const text = saved > 0
-      ? ` opentoken  saved ${formatTokens(saved)} tokens   ${time}`
-      : ` opentoken   ${time}`
+    const metrics = await readCurrentSessionMetrics(start)
+    const time = formatTime(new Date())
+    const duration = formatDuration(Date.now() - start)
+
+    // Compression level emoji
+    const levelEmoji = "🌸"
+
+    let text: string
+    if (metrics.tokensSaved > 0) {
+      text = `${levelEmoji} opentoken  saved ${formatTokens(metrics.tokensSaved)} tokens  ${metrics.toolCalls} calls  ${duration}  ${time}`
+    } else {
+      text = `${levelEmoji} opentoken  ready  ${duration}  ${time}`
+    }
 
     setDisplay(text)
   }
 
   onMount(() => {
-    setDisplay(buildDisplay())
     loadMetrics()
-    metricsInterval = setInterval(loadMetrics, 5000)
+    metricsInterval = setInterval(loadMetrics, 3000)
   })
 
   onCleanup(() => {
@@ -99,7 +110,6 @@ function StatusBarWidget(props: { theme: TuiTheme }) {
 }
 
 const plugin: TuiPlugin = async (api, _options, _meta) => {
-  // Track session state for event-driven updates
   const [sessionStart, setSessionStart] = createSignal<number | null>(null)
 
   api.event.on("session.created", () => {
@@ -110,12 +120,11 @@ const plugin: TuiPlugin = async (api, _options, _meta) => {
     setSessionStart(null)
   })
 
-  // Use session_prompt_right slot — proven by opencodeBar reference plugin
   api.slots.register({
     order: 50,
     slots: {
       session_prompt_right(ctx: TuiSlotContext, _props: { session_id: string }) {
-        return <StatusBarWidget theme={ctx.theme} />
+        return <StatusBarWidget theme={ctx.theme} sessionStart={sessionStart} />
       },
     },
   })
