@@ -123,10 +123,10 @@ mkdir -p ~/.config/opencode/plugins/opentoken
 curl -fsSL https://github.com/MrGray17/opentoken/archive/refs/heads/main.tar.gz | tar xz --strip-components=1 -C ~/.config/opencode/plugins/opentoken
 ```
 
-### Via npm
+### Via npm (from GitHub)
 
 ```bash
-npm install opentoken
+npm install github:MrGray17/opentoken
 ```
 
 Then add to your OpenCode config:
@@ -135,12 +135,6 @@ Then add to your OpenCode config:
 {
   "plugin": ["opentoken"]
 }
-```
-
-### Via GitHub (latest)
-
-```bash
-npm install github:MrGray17/opentoken
 ```
 
 ### Per-project (local copy)
