@@ -4,11 +4,11 @@
 - [x] #3 Block verbose commands (npm install → npm install --quiet, curl → curl -s)
 - [x] #5 Subagent budget enforcement (read byte limits, call counts)
 - [x] #6 Block minified/generated files (.min.js, dist/, node_modules/, bundled)
-- [x] #7 Size caps on write/edit (100KB write, 50KB edit)
+- [x] #7 Size caps on write/edit (100KB write, 50KB edit) → tightened to 50KB/20KB
 - [x] #14 Large output offload (>500 lines → temp file + pointer)
 - [x] #15 XML/Markdown block stripping (<antThinking>, <thinking>)
-- [x] #16 Binary detection (NUL byte scan, suppress)
-- [x] #17 Output suppression (>500KB → block entirely)
+- [x] #16 Binary detection (NUL byte scan, suppress) → expanded to 64KB
+- [x] #17 Output suppression (>500KB → block entirely) → tightened to 100KB
 - [x] #20 Key aliasing (replace long JSON keys with short aliases)
 - [x] #21 Whitespace/null cleanup (strip redundant fields, timestamps)
 - [x] #25 Cross-call deduplication (same output within N calls → collapse)
@@ -28,7 +28,64 @@
 - [x] #1 Structural Symbol Index (find_symbol, get_function_source) — `symbolindex.ts`
 - [x] #5 LSP-First Enforcement (block grep for symbols) — `lspfirst.ts`
 
-## Phase 3: Advanced (Complex)
+## Phase 3: Production Fixes & Polish ✅ DONE
+- [x] install.sh — add `bun install` / `npm install` for dependencies
+- [x] install.sh — fix sed double-prefix bug on re-install
+- [x] install.sh — add TUI deps to inline package.json
+- [x] package.json — version 1.1.0, proper exports, `.tsx` in files, TUI deps in dependencies
+- [x] .npmignore — exclude `.opencode/`
+- [x] LICENSE — add MIT license
+- [x] Context tracking fix — `updateContext(afterTokens)` not `beforeTokens` (prevents context inflation)
+- [x] Read cache LRU cap — `MAX_CACHE_SIZE = 500` with eviction
+- [x] Read cache — fix float mtime comparison (`Math.abs < 1`)
+- [x] Offload store — `MAX_OFFLOAD_ENTRIES = 200` cap
+- [x] Rewind store — `MAX_REWIND_ENTRIES = 50` cap
+- [x] Rewind compression — head+tail extraction (first 10 + last 5), threshold 50KB → 15KB
+- [x] Session.ts — replace `||` with `??` (0 was treated as falsy)
+- [x] Auto-escalation — add `deescalate()` function with hysteresis thresholds
+- [x] Router — remove 7 phantom stages (import-collapse, md-outline, xml-collapse, yaml-collapse, csv-sample, error-preserve, truncation)
+- [x] Pre-call — block lock files (package-lock.json, yarn.lock, Cargo.lock, pnpm-lock.yaml, Gemfile.lock, go.sum, composer.lock, bun.lock, bun.lockb, poetry.lock, Pipfile.lock)
+- [x] Pre-call — add 7 new rewrite rules (kubectl -o wide, terraform -no-color, go -v=false, make -s, brew -q, apt -qq, mvn/gradle -q)
+- [x] Post-call — URL shortening (strip query params + hash for URLs >100 chars)
+- [x] Post-call — base64 inline content stripping
+- [x] Generic filter — stack trace compression (keep top + ...N frames... + bottom)
+- [x] Generic filter — thresholds tightened (80 lines, 20KB)
+- [x] Grep filter — rg --json and rg --vimgrep format support
+- [x] Grep filter — route bash grep/rg/ag/ack commands to filterGrep
+- [x] Secrets — compile 18 patterns into single alternation regex (33x fewer allocations)
+- [x] Folding — expanded log format detection (Python logging, Kubernetes/glibc, syslog)
+- [x] Metrics — log rotation at 10MB, keep 5 rotated files
+- [x] Auto-escalation — LEAN filler list expanded 17 → 32 phrases
+- [x] Auto-escalation — ULTRA protects code lines from phrase replacement
+- [x] Thresholds tightened across 7 files (11 constants)
+- [x] TUI status bar — `src/tui.tsx` with token savings + clock
+- [x] TUI status bar — `readRecentMetrics` bug fix (totalCalls now uses last 50, not all)
+- [x] Tests — 100/100 pass, 148 expect() calls (added 28 new tests)
+
+## Phase 4: Post-Release Tuning (Needs Real-World Usage)
+- [ ] **Threshold tuning** — monitor compression quality in real sessions; adjust 80 lines / 8KB / 20KB thresholds based on user feedback
+- [ ] **De-escalation hysteresis tuning** — verify 45%/65%/80% thresholds don't cause oscillation in long sessions
+- [ ] **Performance profiling** — measure cumulative latency of 14 stages per tool call in large repos
+- [ ] **Stack trace regex** — verify no false positives on legitimate code with "at" keywords
+- [ ] **URL shortening** — verify no edge cases with encoded URLs, IP addresses, or file:// URLs
+- [ ] **Lock file blocking** — verify users can still access lock files when explicitly needed
+- [ ] **Binary detection** — verify 64KB threshold catches all binary types without false positives
+
+## Phase 5: Telemetry & Observability
+- [ ] **`opentoken stats` command** — summarize savings (total tokens saved, avg savings %, calls processed, session summary)
+- [ ] **Metrics aggregation** — add daily/weekly summary to metrics.jsonl or separate summary file
+- [ ] **Status bar improvements** — add session duration, current compression level indicator, active/de-escalated state
+- [ ] **Error logging** — track which stages fail and how often (separate error log, not metrics)
+- [ ] **Health check endpoint** — expose plugin status via MCP tool for debugging
+
+## Phase 6: TUI Verification & Improvements
+- [ ] **Verify `app_bottom` slot renders** — restart OpenCode with TUI plugin and confirm status bar appears
+- [ ] **Fallback slot** — if `app_bottom` doesn't render, try `session_prompt_right` (used by opencodeBar reference)
+- [ ] **Event-driven updates** — listen to `session.created`, `session.deleted`, `session.status` events instead of polling files every 5 seconds
+- [ ] **Status bar config** — allow users to customize emoji set, time format, display mode (compact/verbose)
+- [ ] **Status bar performance** — verify 5-second file polling doesn't cause I/O contention on slow disks
+
+## Phase 7: Advanced (Future)
 - [ ] #24 Semantic caching (vector similarity for read-only tool results)
 - [ ] #27 Persistent memory (SQLite + FTS5 + vector embeddings)
 - [ ] #29 Impact analysis (change impact, backward slicing)
@@ -49,6 +106,16 @@
 - Conservative fallback: never worse than original
 - Error/failure preservation: never modified
 - UTF-8 safe: never truncate mid-character
+
+## Known Risks & Mitigations
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| Thresholds too aggressive | Users miss context | `conservativeFilter` ensures output never larger; easy to adjust |
+| 14 stages add latency | Slow tool responses | `safeStage` wraps each; profile after real usage |
+| `app_bottom` slot untested | Status bar doesn't show | Fallback to `session_prompt_right` |
+| De-escalation oscillation | Compression level flickers | Hysteresis thresholds with 5% buffer |
+| Secrets regex false positives | Legitimate text redacted | Patterns are specific; review edge cases |
+| Lock file blocking | Can't read lock files when needed | Only blocks reads, not writes; users can override |
 
 ## Technique Sources
 | Technique | Source Tool | Max Savings |

@@ -6,8 +6,9 @@ import path from "path"
 import os from "os"
 
 const OFFLOAD_DIR = path.join(os.homedir(), ".config", "opentoken", "offload")
-const MAX_INLINE_LINES = 200
-const MAX_INLINE_BYTES = 20 * 1024 // 20KB
+const MAX_INLINE_LINES = 80
+const MAX_INLINE_BYTES = 8 * 1024 // 8KB
+const MAX_OFFLOAD_ENTRIES = 200 // Cap entries to prevent unbounded memory growth
 
 interface OffloadEntry {
   id: string
@@ -113,6 +114,12 @@ export async function progressiveDisclosure(content: string, tool: string): Prom
     timestamp: Date.now(),
   }
   offloadStore.set(id, entry)
+
+  // Evict oldest entries if over capacity
+  while (offloadStore.size > MAX_OFFLOAD_ENTRIES) {
+    const oldestKey = offloadStore.keys().next().value
+    if (oldestKey) offloadStore.delete(oldestKey)
+  }
 
   // Return summary + pointer
   return {

@@ -5,7 +5,7 @@
 // #20 Key aliasing (replace long JSON keys with short aliases)
 // #21 Whitespace/null cleanup (strip redundant fields, timestamps)
 
-const MAX_OUTPUT_BYTES = 500 * 1024 // 500KB — block entirely
+const MAX_OUTPUT_BYTES = 100 * 1024 // 100KB — block entirely
 
 // #15: Strip reasoning/thinking blocks
 const THINKING_BLOCKS: RegExp[] = [
@@ -27,16 +27,17 @@ export function stripThinkingBlocks(text: string): string {
 
 // #16: Binary detection via NUL byte scan
 function isBinaryOutput(text: string): boolean {
-  // Check first 8KB for NUL bytes
-  const sample = text.slice(0, 8192)
+  // Check first 64KB for NUL bytes (expanded from 8KB for better detection)
+  const sample = text.slice(0, 65536)
   const nulCount = (sample.match(/\0/g) || []).length
   return nulCount > 3 // More than 3 NUL bytes = binary
 }
 
 export function detectAndHandleBinary(text: string): { binary: boolean; result: string } {
   if (isBinaryOutput(text)) {
-    // Try to extract any text content
-    const textContent = text.replace(/[\0-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]/g, "")
+    // Try to extract any text content — UTF-8 safe
+    // Strip control chars but preserve valid UTF-8 sequences
+    const textContent = text.replace(/[\0-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, "")
     if (textContent.trim().length < text.length * 0.1) {
       return { binary: true, result: "[Binary output suppressed — no text content]" }
     }
@@ -180,8 +181,7 @@ const LONG_KEY_MAP: Record<string, string> = {
 export function aliasJsonKeys(text: string): string {
   if (!text.includes("{") || !text.includes("}")) return text
 
-  // Only match keys that appear after { or , (structural JSON positions)
-  // Uses lookbehind to avoid matching inside string values
+  // Match keys after { or , (structural JSON positions)
   return text.replace(/(?<=[{,]\s*)"([a-zA-Z_]\w*)"\s*:/g, (match, key) => {
     const alias = LONG_KEY_MAP[key]
     if (alias) {
@@ -189,6 +189,27 @@ export function aliasJsonKeys(text: string): string {
     }
     return match
   })
+}
+
+// #22: URL shortening — strip query params + hash from long URLs
+export function shortenUrls(text: string): string {
+  // Match URLs and check total length in callback
+  return text.replace(/https?:\/\/[^\s"'<>]+/g, (url) => {
+    if (url.length <= 100) return url // Skip short URLs
+    try {
+      const parsed = new URL(url)
+      // Keep only origin + pathname
+      return parsed.origin + parsed.pathname
+    } catch {
+      return url // Invalid URL, leave as-is
+    }
+  })
+}
+
+// #23: Base64 inline content stripping
+export function stripBase64Content(text: string): string {
+  // Replace data:...;base64,... with placeholder
+  return text.replace(/data:[^;]+;base64,[A-Za-z0-9+/=]+/g, "[base64 content stripped]")
 }
 
 // #21: Whitespace/null cleanup — strip redundant fields
@@ -254,11 +275,17 @@ export function postCallProcess(text: string): string {
   // #15: Strip thinking blocks
   result = stripThinkingBlocks(result)
 
+  // #23: Strip base64 inline content (before other processing)
+  result = stripBase64Content(result)
+
   // #21: Whitespace/null cleanup (before key aliasing)
   result = cleanWhitespaceAndNulls(result)
 
   // #20: Key aliasing
   result = aliasJsonKeys(result)
+
+  // #22: URL shortening
+  result = shortenUrls(result)
 
   return result
 }

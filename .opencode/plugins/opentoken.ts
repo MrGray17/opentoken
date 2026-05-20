@@ -7,10 +7,10 @@ import os from "os"
 
 // Phase 1 imports
 import { preCallFilter } from "./opentoken/precall"
-import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls } from "./opentoken/postcall"
+import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content } from "./opentoken/postcall"
 import { deduplicate, resetDedup } from "./opentoken/dedup"
 import { progressiveDisclosure, cleanupOffloaded } from "./opentoken/progressive"
-import { applyAutoEscalation, updateContext, getCompressionLevel, resetEscalation } from "./opentoken/autoescalate"
+import { applyAutoEscalation, deescalate, updateContext, getCompressionLevel, resetEscalation } from "./opentoken/autoescalate"
 import {
   loadSessionSummary,
   finalizeSession,
@@ -180,8 +180,8 @@ interface ToolOutputAfter {
 
 // ─── HELPERS ───
 
-const SHORT_OUTPUT_THRESHOLD = 200
-const MAX_OUTPUT_LENGTH = 51200
+const SHORT_OUTPUT_THRESHOLD = 80
+const MAX_OUTPUT_LENGTH = 20000
 
 function shouldSkipFilter(output: string): boolean {
   const lines = output.split("\n")
@@ -253,24 +253,30 @@ async function applyBashFilter(command: string, output: string): Promise<string>
   const family = safeStage("detectFamily", () => detectFamily(command), "generic")
   let filtered: string
 
-  switch (family) {
-    case "git":
-      filtered = safeStage("filterGitOutput", () => filterGitOutput(command, output), output)
-      break
-    case "npm":
-      filtered = safeStage("filterNpmOutput", () => filterNpmOutput(command, output), output)
-      break
-    case "cargo":
-      filtered = safeStage("filterCargoOutput", () => filterCargoOutput(command, output), output)
-      break
-    case "test":
-      filtered = safeStage("filterTestOutput", () => filterTestOutput(command, output), output)
-      break
-    case "fs":
-      filtered = safeStage("filterFsOutput", () => filterFsOutput(command, output), output)
-      break
-    default:
-      filtered = safeStage("filterGeneric", () => filterGeneric(output), output)
+  // Route bash grep/rg/ag/ack commands to grep filter instead of family filter
+  const isGrepCommand = /\b(grep|rg|ag|ack)\b/.test(command)
+  if (isGrepCommand) {
+    filtered = safeStage("filterGrep", () => filterGrep(output), output)
+  } else {
+    switch (family) {
+      case "git":
+        filtered = safeStage("filterGitOutput", () => filterGitOutput(command, output), output)
+        break
+      case "npm":
+        filtered = safeStage("filterNpmOutput", () => filterNpmOutput(command, output), output)
+        break
+      case "cargo":
+        filtered = safeStage("filterCargoOutput", () => filterCargoOutput(command, output), output)
+        break
+      case "test":
+        filtered = safeStage("filterTestOutput", () => filterTestOutput(command, output), output)
+        break
+      case "fs":
+        filtered = safeStage("filterFsOutput", () => filterFsOutput(command, output), output)
+        break
+      default:
+        filtered = safeStage("filterGeneric", () => filterGeneric(output), output)
+    }
   }
 
   const reversible = await safeStageAsync("applyReversibleCompression", () => applyReversibleCompression(filtered), { result: filtered, compressed: false })
@@ -343,7 +349,7 @@ async function applyReadFilter(filePath: string, content: string): Promise<strin
 
   filtered = safeStage("applyAutoEscalation", () => applyAutoEscalation(filtered), filtered)
 
-  await safeStageAsync("setCachedRead", () => setCachedRead(filePath, content), undefined)
+  await safeStageAsync("setCachedRead", () => setCachedRead(filePath, filtered), undefined)
 
   return conservativeFilter(content, filtered)
 }
@@ -504,6 +510,11 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
       try {
         if (!output.output) return
 
+        // Track errors in original output before filtering
+        if (hasErrors(output.output)) {
+          trackError(output.output)
+        }
+
         // Security: Validate output size
         const sizeCheck = validateOutputSize(output.output)
         if (!sizeCheck.valid) {
@@ -549,7 +560,7 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
 
         if (saved > 0) {
           trackTokensSaved(saved)
-          updateContext(beforeTokens)
+          updateContext(afterTokens)
 
           const family = tool === "bash" ? detectFamily(String(input.args?.command || "")) : tool
 
@@ -573,6 +584,9 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
         }
 
         output.output = filtered
+
+        // De-escalate compression when context pressure eases
+        deescalate()
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         console.error(`[OpenToken] tool.execute.after error: ${msg}`)

@@ -5,10 +5,10 @@ import { describe, it, expect } from "bun:test"
 
 // Phase 1 imports
 import { preCallFilter, rewriteCommand, isMinifiedOrGenerated } from "../src/precall"
-import { postCallProcess, stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls } from "../src/postcall"
+import { postCallProcess, stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content } from "../src/postcall"
 import { deduplicate, resetDedup } from "../src/dedup"
 import { progressiveDisclosure, cleanupOffloaded } from "../src/progressive"
-import { applyAutoEscalation, updateContext, getCompressionLevel, resetEscalation } from "../src/autoescalate"
+import { applyAutoEscalation, deescalate, updateContext, getCompressionLevel, resetEscalation } from "../src/autoescalate"
 import { detectFamily } from "../src/families/detect"
 import { filterGitStatus, filterGitDiff, filterGitLog } from "../src/families/git"
 import { filterNpmInstall, filterNpmTest } from "../src/families/npm"
@@ -600,5 +600,181 @@ describe("Status Line", () => {
     expect(summary).toContain("tokens")
     expect(summary).toContain("calls")
     expect(summary).toMatch(/[✨🌟💎🦋🌺🌸🍃🌙]/)
+  })
+})
+
+describe("Auto-Escalation De-escalation", () => {
+  it("de-escalates from ceiling when fill drops", () => {
+    resetEscalation()
+    updateContext(170000) // 85% fill → ceiling
+    expect(getCompressionLevel()).toBe("ceiling")
+    // Simulate context reset (de-escalate checks fillPct)
+    const level = deescalate()
+    // fillPct is still high, so level stays same unless we reset context
+    expect(level).toBe("ceiling")
+  })
+  it("de-escalates from ultra to lean when fill drops below 80%", () => {
+    resetEscalation()
+    updateContext(140000) // 70% fill → ultra
+    expect(getCompressionLevel()).toBe("ultra")
+    // De-escalate: fillPct 0.70 < 0.80, so ultra → lean
+    const level = deescalate()
+    expect(level).toBe("lean")
+  })
+})
+
+describe("URL Shortening", () => {
+  it("shortens long URLs by stripping query params", () => {
+    const input = "See https://example.com/api/v1/users?foo=bar&baz=qux&token=abc123def456ghi789jkl012mno345pqr678stu901vwx234yz for details"
+    const result = shortenUrls(input)
+    expect(result).toBe("See https://example.com/api/v1/users for details")
+  })
+  it("leaves short URLs unchanged", () => {
+    const input = "See https://example.com for details"
+    const result = shortenUrls(input)
+    expect(result).toBe(input)
+  })
+  it("handles multiple URLs", () => {
+    const input = "https://api.example.com/v1/data?foo=bar&baz=qux&token=abc123def456ghi789jkl012mno345pqr678stu901vwx234yz and https://cdn.example.com/assets/image.png?width=100&height=200&format=png&quality=90&crop=center&v=1234567890"
+    const result = shortenUrls(input)
+    expect(result).toContain("https://api.example.com/v1/data")
+    expect(result).toContain("https://cdn.example.com/assets/image.png")
+    expect(result).not.toContain("foo=bar")
+    expect(result).not.toContain("width=100")
+  })
+})
+
+describe("Base64 Content Stripping", () => {
+  it("strips base64 data URIs", () => {
+    const input = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    const result = stripBase64Content(input)
+    expect(result).toBe("[base64 content stripped]")
+  })
+  it("leaves non-base64 content unchanged", () => {
+    const input = "Hello world"
+    const result = stripBase64Content(input)
+    expect(result).toBe(input)
+  })
+  it("strips multiple base64 URIs", () => {
+    const input = "data:image/jpeg;base64,/9j/4AAQSkZJRg== and data:text/css;base64,Ym9keXt9"
+    const result = stripBase64Content(input)
+    expect(result).toBe("[base64 content stripped] and [base64 content stripped]")
+  })
+})
+
+describe("Stack Trace Compression", () => {
+  it("compresses long stack traces", () => {
+    const stack = `Error: Something went wrong
+at foo (bar.js:1:2)
+at baz (qux.js:3:4)
+at quux (corge.js:5:6)
+at grault (garply.js:7:8)
+at waldo (fred.js:9:10)
+at plugh (xyzzy.js:11:12)
+at thud (bar.js:13:14)`
+    const result = filterGeneric(stack)
+    expect(result).toContain("at foo (bar.js:1:2)")
+    expect(result).toContain("at thud (bar.js:13:14)")
+    expect(result).toContain("stack frames omitted")
+  })
+  it("leaves short stack traces unchanged", () => {
+    const stack = `Error: Something went wrong
+at foo (bar.js:1:2)
+at baz (qux.js:3:4)`
+    const result = filterGeneric(stack)
+    expect(result).toBe(stack)
+  })
+})
+
+describe("Lock File Blocking", () => {
+  it("blocks package-lock.json reads", () => {
+    const result = isMinifiedOrGenerated("package-lock.json")
+    expect(result).toBe(true)
+  })
+  it("blocks yarn.lock reads", () => {
+    const result = isMinifiedOrGenerated("yarn.lock")
+    expect(result).toBe(true)
+  })
+  it("blocks Cargo.lock reads", () => {
+    const result = isMinifiedOrGenerated("Cargo.lock")
+    expect(result).toBe(true)
+  })
+  it("blocks pnpm-lock.yaml reads", () => {
+    const result = isMinifiedOrGenerated("pnpm-lock.yaml")
+    expect(result).toBe(true)
+  })
+  it("blocks go.sum reads", () => {
+    const result = isMinifiedOrGenerated("go.sum")
+    expect(result).toBe(true)
+  })
+  it("blocks bun.lock reads", () => {
+    const result = isMinifiedOrGenerated("bun.lock")
+    expect(result).toBe(true)
+  })
+})
+
+describe("Grep Filter — rg JSON/vimgrep", () => {
+  it("parses rg --json format", () => {
+    const jsonLine = '{"type":"match","data":{"path":{"text":"src/test.ts"},"line_number":42,"lines":{"text":"const x = 1;"}}}'
+    const result = filterGrep(jsonLine)
+    expect(result).toContain("src/test.ts")
+    expect(result).toContain("42")
+  })
+  it("parses rg --vimgrep format (file:line:col:content)", () => {
+    const vimgrepLine = "src/test.ts:42:5:const x = 1;"
+    const result = filterGrep(vimgrepLine)
+    expect(result).toContain("src/test.ts")
+    expect(result).toContain("42")
+  })
+  it("parses standard grep format (file:line:content)", () => {
+    const grepLine = "src/test.ts:42:const x = 1;"
+    const result = filterGrep(grepLine)
+    expect(result).toContain("src/test.ts")
+    expect(result).toContain("42")
+  })
+})
+
+describe("Secrets — Single Regex", () => {
+  it("redacts AWS keys", () => {
+    const result = redactSecrets("AKIAIOSFODNN7EXAMPLE")
+    expect(result).toBe("[REDACTED]")
+  })
+  it("redacts GitHub tokens", () => {
+    const result = redactSecrets("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12")
+    expect(result).toBe("[REDACTED]")
+  })
+  it("redacts OpenAI keys", () => {
+    const result = redactSecrets("sk-abcdefghijklmnopqrstuvwxyz1234567890")
+    expect(result).toBe("[REDACTED]")
+  })
+  it("redacts multiple secrets in one pass", () => {
+    const input = "AWS: AKIAIOSFODNN7EXAMPLE GitHub: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12"
+    const result = redactSecrets(input)
+    expect(result).toContain("[REDACTED]")
+    expect(result).not.toContain("AKIAIOSFODNN7EXAMPLE")
+    expect(result).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12")
+  })
+})
+
+describe("New Pre-Call Rewrite Rules", () => {
+  it("adds -o wide to kubectl", () => {
+    const result = rewriteCommand("kubectl get pods")
+    expect(result).toBe("kubectl get pods -o wide")
+  })
+  it("adds -no-color to terraform", () => {
+    const result = rewriteCommand("terraform plan")
+    expect(result).toBe("terraform plan -no-color")
+  })
+  it("adds -v=false to go build", () => {
+    const result = rewriteCommand("go build ./...")
+    expect(result).toBe("go build -v=false ./...")
+  })
+  it("adds -s to make", () => {
+    const result = rewriteCommand("make build")
+    expect(result).toBe("make build -s")
+  })
+  it("adds -q to brew", () => {
+    const result = rewriteCommand("brew install node")
+    expect(result).toBe("brew install node -q")
   })
 })

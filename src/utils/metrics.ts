@@ -1,5 +1,9 @@
+// Metrics recording — append JSONL entries for offline analysis
+// Implements log rotation: 10MB max, keeps 5 rotated files
+
 import path from "path"
 import os from "os"
+import fs from "fs"
 
 interface MetricEntry {
   ts: string
@@ -13,25 +17,48 @@ interface MetricEntry {
 
 const METRICS_DIR = path.join(os.homedir(), ".config", "opentoken")
 const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl")
+const MAX_METRICS_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_ROTATED_FILES = 5
 
-async function ensureDir() {
+function ensureDir(): void {
   try {
-    const dirExists = await Bun.file(METRICS_DIR).exists()
-    if (!dirExists) {
-      const proc = Bun.spawn(["mkdir", "-p", METRICS_DIR])
-      await proc.exited
+    if (!fs.existsSync(METRICS_DIR)) {
+      fs.mkdirSync(METRICS_DIR, { recursive: true })
     }
   } catch {
     // Homedir inaccessible — metrics will silently fail
   }
 }
 
-export async function recordMetric(entry: MetricEntry): Promise<void> {
+// Rotate metrics file if it exceeds size limit
+function rotateIfNeeded(): void {
   try {
-    await ensureDir()
+    if (!fs.existsSync(METRICS_FILE)) return
+    const stat = fs.statSync(METRICS_FILE)
+    if (stat.size < MAX_METRICS_SIZE) return
+
+    // Rotate: delete oldest, shift others, rename current
+    const oldest = `${METRICS_FILE}.${MAX_ROTATED_FILES}`
+    if (fs.existsSync(oldest)) fs.unlinkSync(oldest)
+
+    for (let i = MAX_ROTATED_FILES - 1; i >= 1; i--) {
+      const src = `${METRICS_FILE}.${i}`
+      const dest = `${METRICS_FILE}.${i + 1}`
+      if (fs.existsSync(src)) fs.renameSync(src, dest)
+    }
+
+    fs.renameSync(METRICS_FILE, `${METRICS_FILE}.1`)
+  } catch {
+    // Rotation failed — continue appending (metrics shouldn't break pipeline)
+  }
+}
+
+export function recordMetric(entry: MetricEntry): void {
+  try {
+    ensureDir()
+    rotateIfNeeded()
     const line = JSON.stringify(entry) + "\n"
-    // @ts-expect-error Bun.writer append option not yet in @types/bun
-    await Bun.file(METRICS_FILE).writer({ append: true }).write(line)
+    fs.appendFileSync(METRICS_FILE, line)
   } catch {
     // Silent fail — metrics shouldn't break the pipeline
   }

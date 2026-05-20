@@ -199,9 +199,6 @@ function determineCompressionCandidates(
   switch (type) {
     case "code":
       candidates.push("skeleton")
-      if (language === "typescript" || language === "javascript") {
-        candidates.push("import-collapse")
-      }
       break
     case "json":
       candidates.push("json-sample", "key-alias")
@@ -210,32 +207,14 @@ function determineCompressionCandidates(
       candidates.push("diff-fold")
       break
     case "log":
-      candidates.push("log-fold", "error-only")
-      break
-    case "csv":
-      candidates.push("csv-sample")
-      break
-    case "markdown":
-      candidates.push("md-outline")
-      break
-    case "xml":
-      candidates.push("xml-collapse")
-      break
-    case "yaml":
-      candidates.push("yaml-collapse")
+      candidates.push("log-fold")
       break
   }
 
   // Content-specific stages
-  if (hasErrors) {
-    candidates.push("error-preserve")
-  }
   if (isRepetitive) {
     candidates.push("dedup")
   }
-
-  // Size-based stages
-  candidates.push("truncation")
 
   return candidates
 }

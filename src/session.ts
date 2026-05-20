@@ -31,14 +31,14 @@ export async function saveSessionSummary(summary: Partial<SessionSummary>): Prom
 
     const newSummary: SessionSummary = {
       timestamp: Date.now(),
-      project: summary.project || existing?.project || "unknown",
-      filesTouched: summary.filesTouched || existing?.filesTouched || [],
-      errors: summary.errors || existing?.errors || [],
-      testResults: summary.testResults || existing?.testResults || [],
-      gitEvents: summary.gitEvents || existing?.gitEvents || [],
-      decisions: summary.decisions || existing?.decisions || [],
-      toolCalls: summary.toolCalls || existing?.toolCalls || 0,
-      tokensSaved: summary.tokensSaved || existing?.tokensSaved || 0,
+      project: summary.project ?? existing?.project ?? "unknown",
+      filesTouched: summary.filesTouched ?? existing?.filesTouched ?? [],
+      errors: summary.errors ?? existing?.errors ?? [],
+      testResults: summary.testResults ?? existing?.testResults ?? [],
+      gitEvents: summary.gitEvents ?? existing?.gitEvents ?? [],
+      decisions: summary.decisions ?? existing?.decisions ?? [],
+      toolCalls: summary.toolCalls ?? existing?.toolCalls ?? 0,
+      tokensSaved: summary.tokensSaved ?? existing?.tokensSaved ?? 0,
     }
 
     const tempFile = `${SESSION_FILE}.tmp`

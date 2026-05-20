@@ -7,7 +7,8 @@ import os from "os"
 import crypto from "crypto"
 
 const REWIND_DIR = path.join(os.homedir(), ".config", "opentoken", "rewind")
-const MAX_COMPRESSED_SIZE = 50 * 1024 // 50KB — compress anything larger
+const MAX_COMPRESSED_SIZE = 15 * 1024 // 15KB — compress anything larger
+const MAX_REWIND_ENTRIES = 50 // Cap entries to prevent unbounded memory growth
 
 interface RewindEntry {
   id: string
@@ -62,6 +63,12 @@ export async function compressAndStore(content: string): Promise<{
   entry.compressedSize = entry.compressed.length
   rewindStore.set(id, entry)
 
+  // Evict oldest entries if over capacity
+  while (rewindStore.size > MAX_REWIND_ENTRIES) {
+    const oldestKey = rewindStore.keys().next().value
+    if (oldestKey) rewindStore.delete(oldestKey)
+  }
+
   const compressionRatio = content.length > 0
     ? Math.round((1 - entry.compressedSize / content.length) * 100)
     : 0
@@ -74,14 +81,19 @@ export async function compressAndStore(content: string): Promise<{
   }
 }
 
-// Compress content (simple compression strategies)
+// Compress content using head+tail extraction — preserves structure while dropping interior
 function compressContent(content: string): string {
   const lines = content.split("\n")
 
-  // Strategy 1: Truncate long lines (preserves blank lines and comments)
-  const truncated = lines.map((l) => (l.length > 200 ? l.slice(0, 200) + "..." : l))
+  // Keep first 10 + last 5 lines, drop interior
+  if (lines.length > 20) {
+    const head = lines.slice(0, 10)
+    const tail = lines.slice(-5)
+    const skipped = lines.length - 15
+    return `${head.join("\n")}\n\n... ${skipped} lines omitted (full content stored in rewind store) ...\n\n${tail.join("\n")}`
+  }
 
-  return truncated.join("\n")
+  return content
 }
 
 // Apply reversible compression to content

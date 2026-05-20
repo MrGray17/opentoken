@@ -1,9 +1,8 @@
 {
   "name": "opentoken",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "description": "Token-saving companion for OpenCode — intercepts, filters, and compresses tool outputs before they reach the model",
   "type": "module",
-  "main": "src/index.ts",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -24,18 +23,32 @@
   },
   "files": [
     "src/**/*.ts",
+    "src/**/*.tsx",
     "README.md",
     "LICENSE"
   ],
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./tui": {
+      "import": "./src/tui.tsx",
+      "default": "./src/tui.tsx"
+    }
+  },
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "^1.15.5"
+    "@opencode-ai/plugin": "^1.15.5",
+    "@opentui/solid": "^0.2.14",
+    "@opentui/core": "^0.2.14",
+    "solid-js": "^1.9.13"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

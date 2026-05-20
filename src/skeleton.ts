@@ -301,7 +301,6 @@ function extractSkeletonRegex(content: string, language: string): string {
 async function extractSkeletonTreeSitter(content: string, language: string): Promise<string | null> {
   try {
     // Try to load tree-sitter dynamically
-    // @ts-expect-error optional dependency, may not be installed
     const Parser = await import("web-tree-sitter")
     // This would require WASM loading, which is complex
     // For now, fall back to regex

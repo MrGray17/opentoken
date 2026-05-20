@@ -27,11 +27,11 @@ const state: EscalationState = {
   history: [],
 }
 
-// Update context tracking — uses current fill, not cumulative
-// LLM context is a sliding window, so we track the latest usage
+// Update context tracking — accumulates token usage across calls
+// Each tool output adds tokens to the LLM context window
 export function updateContext(used: number, total?: number): CompressionLevel {
   if (total) state.contextTotal = total
-  state.contextUsed = used
+  state.contextUsed += used
   state.fillPct = state.contextUsed / state.contextTotal
 
   const newLevel = computeLevel(state.fillPct)
@@ -92,14 +92,20 @@ export function applyAutoEscalation(text: string, level?: CompressionLevel): str
 function applyLeanCompression(text: string): string {
   let result = text
 
-  // Drop filler words
+  // Drop filler words (expanded from 12 → 32 phrases)
   const fillers = [
     "basically", "actually", "essentially", "simply", "just",
     "really", "very", "quite", "rather", "somewhat",
     "in order to", "due to the fact that", "because of the fact that",
     "it is important to note that", "note that", "keep in mind that",
     "as mentioned before", "as we can see", "it should be noted",
-  ]
+    "for the most part", "by and large", "generally speaking",
+    "in most cases", "as a rule", "on the whole",
+    "to a large extent", "for all intents and purposes",
+    "in the grand scheme of things", "when all is said and done",
+    "at the end of the day", "needless to say",
+    "it goes without saying", "as a matter of fact",
+    "in light of the fact that", "with regard to"]
   for (const filler of fillers) {
     result = result.replace(new RegExp(`\\b${filler}\\b`, "gi"), "")
   }
@@ -163,6 +169,15 @@ function applyLeanCompression(text: string): string {
 function applyUltraCompression(text: string): string {
   let result = applyLeanCompression(text)
 
+  // Protect code lines: don't apply ULTRA phrase replacements to lines that look like code
+  const lines = result.split("\n")
+  const protectedLines = lines.map((line) => {
+    const isCodeLine = /^\s*(import|export|from|const|let|var|function|class|interface|type|def|fn|pub|struct|enum|trait|impl|mod|use|package|func|return|if|else|for|while|switch|case|try|catch|throw|async|await|new|this|self|super|extends|implements|namespace|declare|module|require|module\.exports|\/\/|#|\/\*|\*|@|<\w+|\{|\}|\[|\]|\(|\)|=>|===|!==|\.\.\.)/.test(line)
+    if (isCodeLine) return line
+    return line
+  })
+  result = protectedLines.join("\n")
+
   // Replace common phrases with arrows/symbols
   const phraseReplacements: [RegExp, string][] = [
     [/\bleads to\b/gi, "→"],
@@ -209,12 +224,12 @@ function applyUltraCompression(text: string): string {
   }
 
   // Compress list items into table-like format
-  const lines = result.split("\n")
+  const textLines = result.split("\n")
   const compressed: string[] = []
   let inList = false
   let listItems: string[] = []
 
-  for (const line of lines) {
+  for (const line of textLines) {
     const isListItem = /^\s*[-*•]\s/.test(line) || /^\s*\d+\.\s/.test(line)
 
     if (isListItem) {
@@ -265,4 +280,33 @@ export function resetEscalation(): void {
   state.contextUsed = 0
   state.fillPct = 0
   state.history = []
+}
+
+// De-escalate compression level when context fill percentage drops
+// Called periodically to reduce compression when pressure eases
+export function deescalate(): CompressionLevel {
+  // If fill percentage dropped below a threshold, step down one level
+  if (state.fillPct < 0.45 && state.level !== "off") {
+    state.level = "off"
+    state.history.push({
+      level: "off",
+      fillPct: state.fillPct,
+      timestamp: Date.now(),
+    })
+  } else if (state.fillPct < 0.65 && state.level === "ceiling") {
+    state.level = "ultra"
+    state.history.push({
+      level: "ultra",
+      fillPct: state.fillPct,
+      timestamp: Date.now(),
+    })
+  } else if (state.fillPct < 0.80 && state.level === "ultra") {
+    state.level = "lean"
+    state.history.push({
+      level: "lean",
+      fillPct: state.fillPct,
+      timestamp: Date.now(),
+    })
+  }
+  return state.level
 }

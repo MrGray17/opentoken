@@ -4,7 +4,7 @@ const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".py", ".rs", ".go", ".
 const CONFIG_EXTENSIONS = [".json", ".yaml", ".yml", ".toml", ".xml", ".ini", ".cfg", ".env", ".conf"]
 const DOC_EXTENSIONS = [".md", ".mdx", ".rst", ".txt"]
 
-const MAX_LINES_PASS = 200
+const MAX_LINES_PASS = 80
 
 // Simple symbol extraction via regex (no tree-sitter dependency for v1)
 const SYMBOL_PATTERNS: Record<string, RegExp[]> = {

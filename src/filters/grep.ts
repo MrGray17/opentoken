@@ -18,26 +18,67 @@ const NOISE_PATTERNS = [
 ]
 
 const MAX_MATCHES_PER_FILE = 10
-const CONTEXT_LINES = 3
+
+interface GrepMatch {
+  file: string
+  lineNum: string
+  content: string
+}
+
+// Parse rg --json line format
+function parseRgJsonLine(line: string): GrepMatch | null {
+  try {
+    const parsed = JSON.parse(line)
+    if (parsed.type === "match" && parsed.data?.path?.text && parsed.data?.line_number != null) {
+      return {
+        file: parsed.data.path.text,
+        lineNum: String(parsed.data.line_number),
+        content: parsed.data.lines?.text?.trim() ?? parsed.data.submatches?.map((s: { match: { text: string } }) => s.match.text).join(" ") ?? "",
+      }
+    }
+  } catch {
+    // Not valid JSON
+  }
+  return null
+}
 
 export function filterGrep(output: string): string {
   const lines = output.split("\n")
   const matches: Map<string, string[]> = new Map()
 
-  for (const line of lines) {
-    // Skip noise directories
-    if (NOISE_PATTERNS.some((p) => p.test(line))) continue
+  // Detect rg --json format (first line is valid JSON with type field)
+  const isRgJson = lines.length > 0 && parseRgJsonLine(lines[0]) !== null
 
-    // Parse grep output: "file:line:content" or "file:line-content"
-    const match = line.match(/^(.+?):(\d+):(.*)$/)
-    if (!match) continue
+  if (isRgJson) {
+    // Parse rg --json format
+    for (const line of lines) {
+      const parsed = parseRgJsonLine(line)
+      if (!parsed) continue
+      if (NOISE_PATTERNS.some((p) => p.test(parsed.file))) continue
 
-    const [, file, lineNum, content] = match
-    if (!matches.has(file)) matches.set(file, [])
+      if (!matches.has(parsed.file)) matches.set(parsed.file, [])
+      const fileMatches = matches.get(parsed.file)!
+      if (fileMatches.length < MAX_MATCHES_PER_FILE) {
+        fileMatches.push(`${parsed.lineNum}: ${parsed.content}`)
+      }
+    }
+  } else {
+    // Parse standard grep output or rg --vimgrep format: "file:line:content" or "file:line-col:content"
+    for (const line of lines) {
+      // Skip noise directories
+      if (NOISE_PATTERNS.some((p) => p.test(line))) continue
 
-    const fileMatches = matches.get(file)!
-    if (fileMatches.length < MAX_MATCHES_PER_FILE) {
-      fileMatches.push(`${lineNum}: ${content}`)
+      // Parse: "file:line:content" or "file:line:col:content" (vimgrep)
+      const match = line.match(/^(.+?):(\d+)(?::(\d+))?:?(.*)$/)
+      if (!match) continue
+
+      const [, file, lineNum, , content] = match
+      if (!matches.has(file)) matches.set(file, [])
+
+      const fileMatches = matches.get(file)!
+      if (fileMatches.length < MAX_MATCHES_PER_FILE) {
+        fileMatches.push(`${lineNum}: ${content}`)
+      }
     }
   }
 

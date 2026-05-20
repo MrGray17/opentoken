@@ -25,6 +25,18 @@ const MINIFIED_PATTERNS = [
   /(?:^|\/)\.venv\//,
   /(?:^|\/)venv\//,
   /(?:^|\/)vendor\//,
+  // Lock files — large, auto-generated, worthless in context
+  /package-lock\.json$/,
+  /yarn\.lock$/,
+  /Cargo\.lock$/,
+  /pnpm-lock\.yaml$/,
+  /Gemfile\.lock$/,
+  /go\.sum$/,
+  /composer\.lock$/,
+  /bun\.lock$/,
+  /bun\.lockb$/,
+  /poetry\.lock$/,
+  /Pipfile\.lock$/,
 ]
 
 // #3: Command rewrite rules — map verbose → quiet
@@ -127,8 +139,56 @@ const COMMAND_REWRITES: { match: RegExp; rewrite: (cmd: string) => string }[] = 
     rewrite: (cmd) => {
       if (cmd.includes("-path") || cmd.includes("-prune")) return cmd
       return `${cmd} -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/dist/*" -not -path "*/.cache/*" -not -path "*/__pycache__/*"`
-    },
-  },
+    }},
+  // kubectl → add -o wide for more info per token
+  {
+    match: /^kubectl\s/,
+    rewrite: (cmd) => {
+      if (cmd.includes(" -o ")) return cmd
+      return `${cmd} -o wide`
+    }},
+  // terraform → add -no-color
+  {
+    match: /^terraform\s/,
+    rewrite: (cmd) => {
+      if (cmd.includes("-no-color")) return cmd
+      return `${cmd} -no-color`
+    }},
+  // go build/test/run → add -v=false
+  {
+    match: /^go\s+(build|test|run)\s/,
+    rewrite: (cmd) => {
+      if (cmd.includes("-v=")) return cmd
+      return cmd.replace(/^(go\s+\w+)/, "$1 -v=false")
+    }},
+  // make → add -s (silent)
+  {
+    match: /^make\s/,
+    rewrite: (cmd) => {
+      if (cmd.includes(" -s") || cmd.includes(" --silent")) return cmd
+      return `${cmd} -s`
+    }},
+  // brew → add -q
+  {
+    match: /^brew\s/,
+    rewrite: (cmd) => {
+      if (cmd.includes(" -q") || cmd.includes(" --quiet")) return cmd
+      return `${cmd} -q`
+    }},
+  // apt/apt-get → add -qq
+  {
+    match: /^(apt|apt-get)\s/,
+    rewrite: (cmd) => {
+      if (cmd.includes(" -q")) return cmd
+      return cmd.replace(/^(apt-get)/, "$1 -qq").replace(/^(apt)(\s)/, "$1 -qq$2")
+    }},
+  // mvn/gradle → add -q
+  {
+    match: /^(mvn|gradle)\s/,
+    rewrite: (cmd) => {
+      if (cmd.includes(" -q") || cmd.includes(" --quiet")) return cmd
+      return `${cmd} -q`
+    }},
 ]
 
 // #6: Check if file path is minified/generated
@@ -148,8 +208,8 @@ export function rewriteCommand(command: string): string {
 }
 
 // #7: Size caps for write/edit
-export const WRITE_MAX_BYTES = 100 * 1024 // 100KB
-export const EDIT_MAX_BYTES = 50 * 1024 // 50KB
+export const WRITE_MAX_BYTES = 50 * 1024 // 50KB
+export const EDIT_MAX_BYTES = 20 * 1024 // 20KB
 
 export function checkWriteSize(content: string): { allowed: boolean; reason?: string } {
   if (content.length > WRITE_MAX_BYTES) {
