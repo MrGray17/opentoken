@@ -2,6 +2,7 @@
 // Production-grade compression pipeline for tool outputs
 
 import type { Plugin } from "@opencode-ai/plugin"
+import { tool } from "@opencode-ai/plugin"
 import path from "path"
 import os from "os"
 
@@ -35,6 +36,8 @@ import { redactSecrets } from "./opentoken/utils/secrets"
 import { estimateTokens } from "./opentoken/utils/tokens"
 import { recordMetric } from "./opentoken/utils/metrics"
 import { getCachedRead, setCachedRead } from "./opentoken/utils/cache"
+import { getStatsSummary, formatStatsSummary, saveStatsSummary } from "./opentoken/utils/stats"
+import { getErrorSummary, logError } from "./opentoken/utils/errors"
 
 // Phase 2 imports
 import { extractSkeleton } from "./opentoken/skeleton"
@@ -136,7 +139,16 @@ function safeStage<T>(name: string, fn: () => T, fallback: T): T {
     return fn()
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    const stack = err instanceof Error ? err.stack : undefined
     console.error(`[OpenToken] Stage "${name}" failed: ${msg}`)
+    logError({
+      ts: new Date().toISOString(),
+      stage: name,
+      tool: "unknown",
+      error: msg,
+      stack,
+      recoverable: true,
+    })
     return fallback
   }
 }
@@ -146,7 +158,16 @@ async function safeStageAsync<T>(name: string, fn: () => T | Promise<T>, fallbac
     return await fn()
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    const stack = err instanceof Error ? err.stack : undefined
     console.error(`[OpenToken] Stage "${name}" failed: ${msg}`)
+    logError({
+      ts: new Date().toISOString(),
+      stage: name,
+      tool: "unknown",
+      error: msg,
+      stack,
+      recoverable: true,
+    })
     return fallback
   }
 }
@@ -592,6 +613,60 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
         console.error(`[OpenToken] tool.execute.after error: ${msg}`)
         // Never crash the pipeline — pass through original output
       }
+    },
+
+    // Custom MCP tools for diagnostics
+    tool: {
+      opentoken_stats: tool({
+        description: "Show OpenToken token savings statistics — total saved, by tool, top savings",
+        args: {},
+        async execute(_args, context) {
+          try {
+            saveStatsSummary()
+            const summary = formatStatsSummary()
+            return { output: summary }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            return { output: `Failed to get stats: ${msg}` }
+          }
+        },
+      }),
+      opentoken_health: tool({
+        description: "Check OpenToken plugin health — error counts, stage failures, config status",
+        args: {},
+        async execute(_args, context) {
+          try {
+            const errors = getErrorSummary()
+            const lines: string[] = []
+            lines.push("🌸 opentoken health check")
+            lines.push("")
+            lines.push(`  Total errors: ${errors.total}`)
+            if (errors.total > 0) {
+              lines.push("")
+              lines.push("  Errors by stage:")
+              for (const [stage, count] of Object.entries(errors.byStage).sort((a, b) => b[1] - a[1])) {
+                lines.push(`    ${stage}: ${count}`)
+              }
+              if (errors.recent.length > 0) {
+                lines.push("")
+                lines.push("  Recent errors:")
+                for (const e of errors.recent.slice(-5)) {
+                  lines.push(`    [${new Date(e.ts).toLocaleTimeString()}] ${e.stage}: ${e.error.slice(0, 100)}`)
+                }
+              }
+            } else {
+              lines.push("  No errors recorded ✅")
+            }
+            lines.push("")
+            lines.push(`  Config: metrics=${config.enableMetrics}, symbols=${config.enableSymbolIndex}`)
+            lines.push(`  Context: ${getCompressionLevel()}`)
+            return { output: lines.join("\n") }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            return { output: `Health check failed: ${msg}` }
+          }
+        },
+      }),
     },
   }
 }

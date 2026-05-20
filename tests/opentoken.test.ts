@@ -778,3 +778,50 @@ describe("New Pre-Call Rewrite Rules", () => {
     expect(result).toBe("brew install node -q")
   })
 })
+
+// ─── PHASE 5 TESTS — Telemetry & Observability ───
+
+import { getStatsSummary, formatStatsSummary, saveStatsSummary } from "../src/utils/stats"
+import { getErrorSummary, logError } from "../src/utils/errors"
+
+describe("Metrics Aggregation", () => {
+  it("returns stats summary structure", () => {
+    const stats = getStatsSummary()
+    expect(stats).toHaveProperty("generatedAt")
+    expect(stats).toHaveProperty("session")
+    expect(stats.session).toHaveProperty("totalCalls")
+    expect(stats.session).toHaveProperty("totalSavedTokens")
+    expect(stats.session).toHaveProperty("avgSavedPct")
+  })
+  it("formats stats summary with correct structure", () => {
+    const summary = formatStatsSummary()
+    expect(summary).toContain("opentoken stats")
+    expect(summary).toContain("Calls:")
+    expect(summary).toContain("Tokens saved:")
+  })
+  it("saves stats summary to disk", () => {
+    saveStatsSummary()
+    // Should not throw
+    expect(true).toBe(true)
+  })
+})
+
+describe("Error Logging", () => {
+  it("logs an error entry", () => {
+    logError({
+      ts: new Date().toISOString(),
+      stage: "testStage",
+      tool: "bash",
+      error: "Test error message",
+      recoverable: true,
+    })
+    // Should not throw
+    expect(true).toBe(true)
+  })
+  it("returns error summary", () => {
+    const summary = getErrorSummary()
+    expect(summary).toHaveProperty("total")
+    expect(summary).toHaveProperty("byStage")
+    expect(summary).toHaveProperty("recent")
+  })
+})

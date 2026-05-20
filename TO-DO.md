@@ -71,19 +71,21 @@
 - [ ] **Lock file blocking** — verify users can still access lock files when explicitly needed
 - [ ] **Binary detection** — verify 64KB threshold catches all binary types without false positives
 
-## Phase 5: Telemetry & Observability
-- [ ] **`opentoken stats` command** — summarize savings (total tokens saved, avg savings %, calls processed, session summary)
-- [ ] **Metrics aggregation** — add daily/weekly summary to metrics.jsonl or separate summary file
-- [ ] **Status bar improvements** — add session duration, current compression level indicator, active/de-escalated state
-- [ ] **Error logging** — track which stages fail and how often (separate error log, not metrics)
-- [ ] **Health check endpoint** — expose plugin status via MCP tool for debugging
+## Phase 5: Telemetry & Observability ✅ DONE
+- [x] `opentoken stats` MCP tool — shows total savings, by tool, top savings
+- [x] `opentoken health` MCP tool — error counts, stage failures, config status
+- [x] Metrics aggregation — compute summaries from metrics.jsonl (stats.ts)
+- [x] Error logging infrastructure — track stage failures to error.jsonl (errors.ts)
+- [x] safeStage/safeStageAsync now log errors to error.jsonl with stack traces
+- [x] saveStatsSummary() writes stats-summary.json for TUI to read
 
-## Phase 6: TUI Verification & Improvements
-- [ ] **Verify `app_bottom` slot renders** — restart OpenCode with TUI plugin and confirm status bar appears
-- [ ] **Fallback slot** — if `app_bottom` doesn't render, try `session_prompt_right` (used by opencodeBar reference)
-- [ ] **Event-driven updates** — listen to `session.created`, `session.deleted`, `session.status` events instead of polling files every 5 seconds
-- [ ] **Status bar config** — allow users to customize emoji set, time format, display mode (compact/verbose)
-- [ ] **Status bar performance** — verify 5-second file polling doesn't cause I/O contention on slow disks
+## Phase 6: TUI Verification & Improvements ✅ DONE
+- [x] Switched from `app_bottom` to `session_prompt_right` slot (proven by opencodeBar)
+- [x] Event-driven updates — listen to session.status, session.created, session.deleted events
+- [x] Status bar shows compression level emoji (🔥 ceiling, ⚡ ultra, 🍃 lean, 💤 off)
+- [x] Status bar shows session duration
+- [x] Status bar reads from stats-summary.json (written by saveStatsSummary)
+- [x] Status bar uses event-driven updates + 5s polling fallback
 
 ## Phase 7: Advanced (Future)
 - [ ] #24 Semantic caching (vector similarity for read-only tool results)
