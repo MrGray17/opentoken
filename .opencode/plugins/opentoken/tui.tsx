@@ -59,14 +59,13 @@ async function readSessionMetrics(): Promise<{ tokensSaved: number; toolCalls: n
     for (const line of lines) {
       try {
         const entry = JSON.parse(line)
-        // Only count entries from current session
         if (sessionStart > 0 && entry.ts) {
           const entryTime = new Date(entry.ts).getTime()
           if (entryTime < sessionStart) continue
         }
         totalSaved += (entry.before_tokens || 0) - (entry.after_tokens || 0)
         totalCalls++
-      } catch { /* skip malformed lines */ }
+      } catch { /* skip */ }
     }
     return { tokensSaved: Math.max(0, totalSaved), toolCalls: totalCalls }
   } catch {
@@ -75,12 +74,12 @@ async function readSessionMetrics(): Promise<{ tokensSaved: number; toolCalls: n
 }
 
 
-function StatusBarWidget(props: { theme: TuiTheme; getMetrics: () => { isStreaming: boolean; isComplete: boolean } | null }) {
+function StatusBarWidget(props: { theme: TuiTheme; getMetrics: () => { isStreaming: boolean; isComplete: boolean } | null; api?: any }) {
   const [time, setTime] = createSignal(formatTime(new Date()))
   const [state, setState] = createSignal<StatusBarState>({
     tokensSaved: 0,
     toolCalls: 0,
-    compressionLevel: "lean",
+    compressionLevel: "off",
     sessionStart: null,
     isStreaming: false,
   })
@@ -91,20 +90,10 @@ function StatusBarWidget(props: { theme: TuiTheme; getMetrics: () => { isStreami
   async function loadMetrics() {
     const metrics = await readSessionMetrics()
 
-    let compressionLevel = "lean"
-    try {
-      const sessionFile = Bun.file(path.join(METRICS_DIR, "session-memory.json"))
-      if (await sessionFile.exists()) {
-        const data = JSON.parse(await sessionFile.text())
-        if (data.compressionLevel) compressionLevel = data.compressionLevel
-      }
-    } catch { /* ignore */ }
-
     setState((prev) => ({
       ...prev,
       tokensSaved: metrics?.tokensSaved ?? prev.tokensSaved,
       toolCalls: metrics?.toolCalls ?? prev.toolCalls,
-      compressionLevel,
     }))
   }
 
@@ -117,6 +106,16 @@ function StatusBarWidget(props: { theme: TuiTheme; getMetrics: () => { isStreami
 
     loadMetrics()
     metricsInterval = setInterval(loadMetrics, 3000)
+
+    // Listen to session events inside widget where setState is accessible
+    if (props.api?.event) {
+      props.api.event.on("session.created", () => {
+        setState((prev) => ({ ...prev, sessionStart: Date.now(), tokensSaved: 0, toolCalls: 0 }))
+      })
+      props.api.event.on("session.deleted", () => {
+        setState((prev) => ({ ...prev, sessionStart: null, tokensSaved: 0, toolCalls: 0 }))
+      })
+    }
   })
 
   onCleanup(() => {
@@ -148,11 +147,8 @@ function StatusBarWidget(props: { theme: TuiTheme; getMetrics: () => { isStreami
 }
 
 const plugin: TuiPlugin = async (api, _options, _meta) => {
-  // Track session state for event-driven updates
-  const [sessionStart, setSessionStart] = createSignal<number | null>(null)
   const [isStreaming, setIsStreaming] = createSignal(false)
 
-  // Listen to session events for instant updates
   api.event.on("session.status", (event: Extract<Event, { type: "session.status" }>) => {
     const status = event.properties.status
     if (status?.type === "busy") {
@@ -160,14 +156,6 @@ const plugin: TuiPlugin = async (api, _options, _meta) => {
     } else if (status?.type === "idle") {
       setIsStreaming(false)
     }
-  })
-
-  api.event.on("session.created", () => {
-    setSessionStart(Date.now())
-  })
-
-  api.event.on("session.deleted", () => {
-    setSessionStart(null)
   })
 
   // Use session_prompt_right slot — proven by opencodeBar reference plugin
@@ -179,6 +167,7 @@ const plugin: TuiPlugin = async (api, _options, _meta) => {
         return (
           <StatusBarWidget
             theme={ctx.theme}
+            api={api}
             getMetrics={() => ({ isStreaming: isStreaming(), isComplete: false })}
           />
         )

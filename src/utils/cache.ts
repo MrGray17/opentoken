@@ -1,7 +1,9 @@
 // Read cache — skip disk read if same file was read within TTL
 // Uses mtime + size as cache key
+// Session-keyed to prevent cross-session cache pollution
 
 import fs from "fs"
+import { SessionStore } from "./session-store"
 
 interface CacheEntry {
   content: string
@@ -12,19 +14,33 @@ interface CacheEntry {
 
 const TTL_MS = 30_000 // 30 seconds
 const MAX_CACHE_SIZE = 500 // LRU cap — evict oldest when exceeded
-const cache = new Map<string, CacheEntry>()
+
+interface CacheState {
+  cache: Map<string, CacheEntry>
+}
+
+function createCacheState(): CacheState {
+  return { cache: new Map() }
+}
+
+const store = new SessionStore<CacheState>()
+
+function getState(sessionID: string): CacheState {
+  return store.get(sessionID, createCacheState)
+}
 
 function makeKey(filePath: string): string {
   return filePath
 }
 
-export function getCachedRead(filePath: string): string | null {
-  const entry = cache.get(makeKey(filePath))
+export function getCachedRead(sessionID: string, filePath: string): string | null {
+  const state = getState(sessionID)
+  const entry = state.cache.get(makeKey(filePath))
   if (!entry) return null
 
   const now = Date.now()
   if (now - entry.ts > TTL_MS) {
-    cache.delete(makeKey(filePath))
+    state.cache.delete(makeKey(filePath))
     return null
   }
 
@@ -38,19 +54,20 @@ export function getCachedRead(filePath: string): string | null {
     // File gone or inaccessible
   }
 
-  cache.delete(makeKey(filePath))
+  state.cache.delete(makeKey(filePath))
   return null
 }
 
-export function setCachedRead(filePath: string, content: string): void {
+export function setCachedRead(sessionID: string, filePath: string, content: string): void {
   try {
+    const state = getState(sessionID)
     const stat = fs.statSync(filePath)
     // LRU eviction: remove oldest entry when cache is full
-    if (cache.size >= MAX_CACHE_SIZE) {
-      const oldestKey = cache.keys().next().value
-      if (oldestKey) cache.delete(oldestKey)
+    if (state.cache.size >= MAX_CACHE_SIZE) {
+      const oldestKey = state.cache.keys().next().value
+      if (oldestKey) state.cache.delete(oldestKey)
     }
-    cache.set(makeKey(filePath), {
+    state.cache.set(makeKey(filePath), {
       content,
       mtime: stat.mtimeMs,
       size: stat.size,

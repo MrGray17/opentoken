@@ -1,6 +1,9 @@
 // Cross-call deduplication engine (#25)
 // Same output within N calls → collapse to single reference line
 // Uses content hashing + similarity detection
+// Session-keyed to prevent cross-session dedup corruption
+
+import { SessionStore } from "./utils/session-store"
 
 interface DedupEntry {
   hash: string
@@ -10,11 +13,23 @@ interface DedupEntry {
   timestamp: number
 }
 
+interface DedupState {
+  recentCalls: DedupEntry[]
+  callCounter: number
+}
+
 const DEDUP_WINDOW = 16 // Number of recent calls to check against
 const SIMILARITY_THRESHOLD = 0.85 // 85% similarity = duplicate
 
-const recentCalls: DedupEntry[] = []
-let callCounter = 0
+function createDedupState(): DedupState {
+  return { recentCalls: [], callCounter: 0 }
+}
+
+const store = new SessionStore<DedupState>()
+
+function getState(sessionID: string): DedupState {
+  return store.get(sessionID, createDedupState)
+}
 
 // Simple hash for content dedup
 function hashContent(text: string): string {
@@ -51,10 +66,10 @@ function jaccardSimilarity(a: string, b: string): number {
 }
 
 // Check if content is similar to any recent call
-function findSimilarEntry(content: string, tool: string): DedupEntry | null {
+function findSimilarEntry(state: DedupState, content: string, tool: string): DedupEntry | null {
   const currentHash = hashContent(content)
 
-  for (const entry of recentCalls) {
+  for (const entry of state.recentCalls) {
     // Exact hash match
     if (entry.hash === currentHash && entry.tool === tool) {
       return entry
@@ -73,44 +88,42 @@ function findSimilarEntry(content: string, tool: string): DedupEntry | null {
 }
 
 // Record a call for future dedup checks
-function recordCall(content: string, tool: string): void {
-  callCounter++
+function recordCall(state: DedupState, content: string, tool: string): void {
+  state.callCounter++
   const entry: DedupEntry = {
     hash: hashContent(content),
-    content: content, // Store full content for accurate dedup
+    content: content,
     tool,
-    callNumber: callCounter,
-    timestamp: Date.now(),
-  }
+    callNumber: state.callCounter,
+    timestamp: Date.now()}
 
-  recentCalls.push(entry)
+  state.recentCalls.push(entry)
 
   // Trim to window size
-  if (recentCalls.length > DEDUP_WINDOW) {
-    recentCalls.splice(0, recentCalls.length - DEDUP_WINDOW)
+  if (state.recentCalls.length > DEDUP_WINDOW) {
+    state.recentCalls.splice(0, state.recentCalls.length - DEDUP_WINDOW)
   }
 }
 
 // Main dedup function
-export function deduplicate(content: string, tool: string): { result: string; deduped: boolean } {
-  const similar = findSimilarEntry(content, tool)
+export function deduplicate(sessionID: string, content: string, tool: string): { result: string; deduped: boolean } {
+  const state = getState(sessionID)
+  const similar = findSimilarEntry(state, content, tool)
 
   if (similar) {
     // Return reference instead of full content
     return {
       deduped: true,
-      result: `[Duplicate of call #${similar.callNumber} (${similar.tool}) — see earlier result]`,
-    }
+      result: `[Duplicate of call #${similar.callNumber} (${similar.tool}) — see earlier result]`}
   }
 
   // Record this call
-  recordCall(content, tool)
+  recordCall(state, content, tool)
 
   return { deduped: false, result: content }
 }
 
 // Reset dedup state (new session)
-export function resetDedup(): void {
-  recentCalls.length = 0
-  callCounter = 0
+export function resetDedup(sessionID: string): void {
+  store.reset(sessionID, createDedupState)
 }

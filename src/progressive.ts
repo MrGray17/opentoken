@@ -1,14 +1,15 @@
 // Progressive disclosure system (#26)
 // Summary first, full content on demand
 // Stores oversized results in temp files, leaves pointer in context
+// Session-keyed to prevent cross-session data leakage
 
 import path from "path"
 import os from "os"
+import { SessionStore } from "./utils/session-store"
 
 const OFFLOAD_DIR = path.join(os.homedir(), ".config", "opentoken", "offload")
 const MAX_INLINE_LINES = 80
 const MAX_INLINE_BYTES = 8 * 1024 // 8KB
-const MAX_OFFLOAD_ENTRIES = 200 // Cap entries to prevent unbounded memory growth
 
 interface OffloadEntry {
   id: string
@@ -20,8 +21,20 @@ interface OffloadEntry {
   timestamp: number
 }
 
-const offloadStore = new Map<string, OffloadEntry>()
-let offloadCounter = 0
+interface OffloadState {
+  store: Map<string, OffloadEntry>
+  counter: number
+}
+
+function createOffloadState(): OffloadState {
+  return { store: new Map(), counter: 0 }
+}
+
+const store = new SessionStore<OffloadState>()
+
+function getState(sessionID: string): OffloadState {
+  return store.get(sessionID, createOffloadState)
+}
 
 async function ensureDir(): Promise<void> {
   try {
@@ -36,9 +49,9 @@ async function ensureDir(): Promise<void> {
 }
 
 // Generate a unique offload ID
-function generateId(): string {
-  offloadCounter++
-  return `ot-${offloadCounter}-${Date.now().toString(36)}`
+function generateId(state: OffloadState): string {
+  state.counter++
+  return `ot-${state.counter}-${Date.now().toString(36)}`
 }
 
 // Create a concise summary of content
@@ -72,7 +85,7 @@ function createSummary(content: string, tool: string): string {
 }
 
 // Offload content to temp file, return summary + pointer
-export async function progressiveDisclosure(content: string, tool: string): Promise<{
+export async function progressiveDisclosure(sessionID: string, content: string, tool: string): Promise<{
   result: string
   offloaded: boolean
   entryId?: string
@@ -89,7 +102,8 @@ export async function progressiveDisclosure(content: string, tool: string): Prom
 
   // Offload full content to file
   await ensureDir()
-  const id = generateId()
+  const state = getState(sessionID)
+  const id = generateId(state)
   const filePath = path.join(OFFLOAD_DIR, `${id}.txt`)
 
   try {
@@ -100,8 +114,7 @@ export async function progressiveDisclosure(content: string, tool: string): Prom
     const tail = lines.slice(-20).join("\n")
     return {
       result: `${summary}\n\n${head}\n\n... ${lines.length - 70} lines omitted ...\n\n${tail}`,
-      offloaded: false,
-    }
+      offloaded: false}
   }
 
   const entry: OffloadEntry = {
@@ -111,30 +124,23 @@ export async function progressiveDisclosure(content: string, tool: string): Prom
     filePath,
     fullSize: content.length,
     fullLines: lines.length,
-    timestamp: Date.now(),
-  }
-  offloadStore.set(id, entry)
-
-  // Evict oldest entries if over capacity
-  while (offloadStore.size > MAX_OFFLOAD_ENTRIES) {
-    const oldestKey = offloadStore.keys().next().value
-    if (oldestKey) offloadStore.delete(oldestKey)
-  }
+    timestamp: Date.now()}
+  state.store.set(id, entry)
 
   // Return summary + pointer
   return {
     result: `${summary}\nFull output offloaded. Use "opentoken fetch ${id}" to retrieve.`,
     offloaded: true,
-    entryId: id,
-  }
+    entryId: id}
 }
 
 // Clean up old offloaded files (older than 1 hour)
-export async function cleanupOffloaded(maxAgeMs = 3600000): Promise<number> {
+export async function cleanupOffloaded(sessionID: string, maxAgeMs = 3600000): Promise<number> {
+  const state = getState(sessionID)
   let cleaned = 0
   const now = Date.now()
 
-  for (const [id, entry] of offloadStore.entries()) {
+  for (const [id, entry] of state.store.entries()) {
     if (now - entry.timestamp > maxAgeMs) {
       try {
         if (await Bun.file(entry.filePath).exists()) {
@@ -144,7 +150,7 @@ export async function cleanupOffloaded(maxAgeMs = 3600000): Promise<number> {
       } catch {
         // Ignore
       }
-      offloadStore.delete(id)
+      state.store.delete(id)
       cleaned++
     }
   }

@@ -12,7 +12,7 @@ import { preCallFilter } from "./precall"
 import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content } from "./postcall"
 import { deduplicate, resetDedup } from "./dedup"
 import { progressiveDisclosure, cleanupOffloaded } from "./progressive"
-import { applyAutoEscalation, deescalate, updateContext, getCompressionLevel, resetEscalation } from "./autoescalate"
+import { applyAutoEscalation, deescalate, updateContext, getCompressionLevel, resetEscalation, resetContextUsed } from "./autoescalate"
 import {
   loadSessionSummary,
   finalizeSession,
@@ -23,6 +23,7 @@ import {
   trackTokensSaved,
   getSessionTracker,
   writeSessionState,
+  resetSessionTracker,
 } from "./session"
 import { detectFamily } from "./families/detect"
 import { filterGitOutput } from "./families/git"
@@ -51,6 +52,10 @@ import { indexDirectory, loadIndex } from "./symbolindex"
 import { shouldBlockGrep, shouldBlockGlob, shouldBlockShellGrep, trackLSPUsage, resetLSPState } from "./lspfirst"
 import { generateStatusLine, generateSessionSummary, resetStatusLine } from "./statusline"
 
+// Phase 7 imports — history compression & session memory
+import { compressMessagesInPlace } from "./history"
+import { writeSessionSummary, getRelevantSummaries, buildMemoryPrompt, extractContextKeywords, getMemoryStats } from "./memory"
+
 // ─── CONFIGURATION ───
 
 interface OpenTokenConfig {
@@ -60,6 +65,10 @@ interface OpenTokenConfig {
   enableMetrics: boolean       // Track token savings to disk
   enableSymbolIndex: boolean   // Build and query symbol index at startup
   conservativeUseTokens: boolean // Use token count (slower) vs byte count (faster) for safety check
+  // Phase 7 — history compression
+  enableHistoryCompression: boolean // Kill switch for experimental hooks (default false)
+  historyCompressionWindow: number  // Messages to keep full-fidelity (default 12)
+  enableSessionMemory: boolean      // Cross-session memory persistence (default false)
 }
 
 const DEFAULT_CONFIG: OpenTokenConfig = {
@@ -69,6 +78,9 @@ const DEFAULT_CONFIG: OpenTokenConfig = {
   enableMetrics: true,
   enableSymbolIndex: true,
   conservativeUseTokens: false,       // Byte count by default (fast)
+  enableHistoryCompression: false,    // Kill switch — opt-in for experimental hooks
+  historyCompressionWindow: 12,       // Keep last 12 messages full-fidelity
+  enableSessionMemory: false,         // Cross-session memory persistence
 }
 
 let config: OpenTokenConfig = DEFAULT_CONFIG
@@ -245,7 +257,7 @@ function routeContent(content: string, filePath?: string): {
 
 // ─── BASH FILTER PIPELINE ───
 
-async function applyBashFilter(command: string, output: string): Promise<string> {
+async function applyBashFilter(sessionID: string, command: string, output: string): Promise<string> {
   output = safeStage("redactSecrets", () => redactSecrets(output), output)
 
   const binary = safeStage("detectAndHandleBinary", () => detectAndHandleBinary(output), { binary: false, result: output })
@@ -302,7 +314,7 @@ async function applyBashFilter(command: string, output: string): Promise<string>
     }
   }
 
-  const reversible = await safeStageAsync("applyReversibleCompression", () => applyReversibleCompression(filtered), { result: filtered, compressed: false })
+  const reversible = await safeStageAsync("applyReversibleCompression", () => applyReversibleCompression(sessionID, filtered), { result: filtered, compressed: false })
   if (reversible.compressed) {
     filtered = reversible.result
   }
@@ -314,7 +326,7 @@ async function applyBashFilter(command: string, output: string): Promise<string>
 
 // ─── READ FILTER PIPELINE ───
 
-async function applyReadFilter(filePath: string, content: string): Promise<string> {
+async function applyReadFilter(sessionID: string, filePath: string, content: string): Promise<string> {
   const pathCheck = sanitizeFilePath(filePath, config.safeReadRoot)
   if (!pathCheck.safe) {
     return `[OpenToken] ${pathCheck.reason}`
@@ -322,9 +334,9 @@ async function applyReadFilter(filePath: string, content: string): Promise<strin
 
   content = safeStage("redactSecrets", () => redactSecrets(content), content)
 
-  trackFile(filePath)
+  trackFile(sessionID, filePath)
 
-  const cached = await safeStageAsync("getCachedRead", () => getCachedRead(filePath), null)
+  const cached = await safeStageAsync("getCachedRead", () => getCachedRead(sessionID, filePath), null)
   if (cached !== null) {
     return cached
   }
@@ -338,7 +350,7 @@ async function applyReadFilter(filePath: string, content: string): Promise<strin
   content = safeStage("stripThinkingBlocks", () => stripThinkingBlocks(content), content)
 
   if (shouldSkipFilter(content)) {
-    await safeStageAsync("setCachedRead", () => setCachedRead(filePath, content), undefined)
+    await safeStageAsync("setCachedRead", () => setCachedRead(sessionID, filePath, content), undefined)
     return content
   }
 
@@ -362,24 +374,24 @@ async function applyReadFilter(filePath: string, content: string): Promise<strin
 
   let filtered = safeStage("filterRead", () => filterRead(filePath, content), content)
 
-  const disclosed = await safeStageAsync("progressiveDisclosure", () => progressiveDisclosure(filtered, "read"), null)
+  const disclosed = await safeStageAsync("progressiveDisclosure", () => progressiveDisclosure(sessionID, filtered, "read"), null)
   if (disclosed) filtered = disclosed.result
 
-  const reversible = await safeStageAsync("applyReversibleCompression", () => applyReversibleCompression(filtered), { result: filtered, compressed: false })
+  const reversible = await safeStageAsync("applyReversibleCompression", () => applyReversibleCompression(sessionID, filtered), { result: filtered, compressed: false })
   if (reversible.compressed) {
     filtered = reversible.result
   }
 
   filtered = safeStage("applyAutoEscalation", () => applyAutoEscalation(filtered), filtered)
 
-  await safeStageAsync("setCachedRead", () => setCachedRead(filePath, filtered), undefined)
+  await safeStageAsync("setCachedRead", () => setCachedRead(sessionID, filePath, filtered), undefined)
 
   return conservativeFilter(content, filtered)
 }
 
 // ─── GREP FILTER PIPELINE ───
 
-async function applyGrepFilter(output: string): Promise<string> {
+async function applyGrepFilter(sessionID: string, output: string): Promise<string> {
   output = safeStage("redactSecrets", () => redactSecrets(output), output)
 
   const binary = safeStage("detectAndHandleBinary", () => detectAndHandleBinary(output), { binary: false, result: output })
@@ -396,10 +408,10 @@ async function applyGrepFilter(output: string): Promise<string> {
 
   let filtered = safeStage("filterGrep", () => filterGrep(output), output)
 
-  const disclosed = await safeStageAsync("progressiveDisclosure", () => progressiveDisclosure(filtered, "grep"), null)
+  const disclosed = await safeStageAsync("progressiveDisclosure", () => progressiveDisclosure(sessionID, filtered, "grep"), null)
   if (disclosed) filtered = disclosed.result
 
-  const reversible = await safeStageAsync("applyReversibleCompression", () => applyReversibleCompression(filtered), { result: filtered, compressed: false })
+  const reversible = await safeStageAsync("applyReversibleCompression", () => applyReversibleCompression(sessionID, filtered), { result: filtered, compressed: false })
   if (reversible.compressed) {
     filtered = reversible.result
   }
@@ -411,7 +423,7 @@ async function applyGrepFilter(output: string): Promise<string> {
 
 // ─── GLOB FILTER PIPELINE ───
 
-async function applyGlobFilter(output: string): Promise<string> {
+async function applyGlobFilter(sessionID: string, output: string): Promise<string> {
   output = safeStage("redactSecrets", () => redactSecrets(output), output)
 
   const suppressed = safeStage("suppressOversized", () => suppressOversized(output), { suppressed: false, result: output })
@@ -423,10 +435,10 @@ async function applyGlobFilter(output: string): Promise<string> {
 
   let filtered = safeStage("filterGlob", () => filterGlob(output), output)
 
-  const disclosed = await safeStageAsync("progressiveDisclosure", () => progressiveDisclosure(filtered, "glob"), null)
+  const disclosed = await safeStageAsync("progressiveDisclosure", () => progressiveDisclosure(sessionID, filtered, "glob"), null)
   if (disclosed) filtered = disclosed.result
 
-  const reversible = await safeStageAsync("applyReversibleCompression", () => applyReversibleCompression(filtered), { result: filtered, compressed: false })
+  const reversible = await safeStageAsync("applyReversibleCompression", () => applyReversibleCompression(sessionID, filtered), { result: filtered, compressed: false })
   if (reversible.compressed) {
     filtered = reversible.result
   }
@@ -438,10 +450,23 @@ async function applyGlobFilter(output: string): Promise<string> {
 
 // ─── MAIN PLUGIN ───
 
+const SESSION_START_FILE = path.join(os.homedir(), ".config", "opentoken", "session-start.json")
+
 export const OpenTokenPlugin: Plugin = async ({ directory }) => {
   console.error("[OpenToken] Plugin loading...")
   await loadConfig(directory)
   console.error(`[OpenToken] Loaded. Symbol index: ${config.enableSymbolIndex}, Metrics: ${config.enableMetrics}`)
+
+  // Generate a unique session ID for this plugin instance
+  // Used as the key for all SessionStore state — ensures all hooks share the same tracker
+  const sessionID = crypto.randomUUID()
+
+  // Write session ID to disk for observability and TUI session detection
+  try {
+    const tmp = SESSION_START_FILE + ".tmp"
+    await Bun.write(tmp, JSON.stringify({ sessionStart: Date.now(), sessionID }))
+    fs.renameSync(tmp, SESSION_START_FILE)
+  } catch { /* ignore */ }
 
   // L38: Load previous session memory
   await safeStageAsync("loadSessionSummary", () => loadSessionSummary(directory), null)
@@ -454,22 +479,20 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
     // Session start — inject memory, reset state
     "session.created": async () => {
       console.error("[OpenToken] Session started — compression active")
-      resetDedup()
-      resetEscalation()
-      resetLSPState(directory)
-      resetStatusLine()
-      await safeStageAsync("cleanupOffloaded", () => cleanupOffloaded(), 0)
-      await safeStageAsync("cleanupRewind", () => cleanupRewind(), 0)
-
-      // Write session start time for TUI plugin to read
       try {
-        const sessionStartFile = path.join(os.homedir(), ".config", "opentoken", "session-start.json")
-        const tmp = sessionStartFile + ".tmp"
-        await Bun.write(tmp, JSON.stringify({ sessionStart: Date.now() }))
-        fs.renameSync(tmp, sessionStartFile)
-      } catch {
-        // Silent fail — TUI will fall back to component mount time
-      }
+        const tmp = SESSION_START_FILE + ".tmp"
+        await Bun.write(tmp, JSON.stringify({ sessionStart: Date.now(), sessionID }))
+        fs.renameSync(tmp, SESSION_START_FILE)
+      } catch { /* ignore */ }
+      resetDedup(sessionID)
+      resetEscalation(sessionID)
+      resetContextUsed(sessionID)
+      resetLSPState(sessionID, directory)
+      resetStatusLine(sessionID)
+      resetSessionTracker(sessionID)
+      await safeStageAsync("writeSessionState", () => writeSessionState(sessionID, directory, "off"), undefined)
+      await safeStageAsync("cleanupOffloaded", () => cleanupOffloaded(sessionID), 0)
+      await safeStageAsync("cleanupRewind", () => cleanupRewind(sessionID), 0)
 
       if (config.enableSymbolIndex) {
         indexDirectory(directory).then((stats) => {
@@ -481,13 +504,17 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
     },
 
     "session.deleted": async () => {
-      const sessionTracker = getSessionTracker()
-      console.log(generateSessionSummary(sessionTracker.tokensSaved, sessionTracker.toolCalls))
-      await safeStageAsync("finalizeSession", () => finalizeSession(directory), undefined)
+      const sessionTracker = getSessionTracker(sessionID)
+      console.log(generateSessionSummary(sessionID, sessionTracker.tokensSaved, sessionTracker.toolCalls))
+      await safeStageAsync("finalizeSession", () => finalizeSession(sessionID, directory), undefined)
+      resetEscalation(sessionID)
+      resetContextUsed(sessionID)
     },
 
     "session.idle": async () => {
-      await safeStageAsync("finalizeSession", () => finalizeSession(directory), undefined)
+      // Idle = user paused, NOT session ended. Persist state but don't reset.
+      const sessionTracker = getSessionTracker(sessionID)
+      await safeStageAsync("writeSessionState", () => writeSessionState(sessionID, directory, getCompressionLevel(sessionID)), undefined)
     },
 
     // L1-L4 + L5: Pre-call interception
@@ -545,7 +572,7 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
 
         // Track errors in original output before filtering
         if (hasErrors(output.output)) {
-          trackError(output.output)
+          trackError(sessionID, output.output)
         }
 
         // Security: Validate output size
@@ -559,41 +586,41 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
         let filtered = output.output
         const tool = validateToolName(input.tool)
 
-        trackToolCall()
-        trackLSPUsage(directory, tool)
+        trackToolCall(sessionID)
+        trackLSPUsage(sessionID, directory, tool)
 
         switch (tool) {
           case "bash": {
             const command = String(input.args?.command || "")
-            filtered = await applyBashFilter(command, output.output)
+            filtered = await applyBashFilter(sessionID, command, output.output)
             break
           }
           case "read": {
             const filePath = String(input.args?.filePath || "")
-            filtered = await applyReadFilter(filePath, output.output)
+            filtered = await applyReadFilter(sessionID, filePath, output.output)
             break
           }
           case "grep": {
-            filtered = await applyGrepFilter(output.output)
+            filtered = await applyGrepFilter(sessionID, output.output)
             break
           }
           case "glob": {
-            filtered = await applyGlobFilter(output.output)
+            filtered = await applyGlobFilter(sessionID, output.output)
             break
           }
           default:
             return // Don't touch other tools
         }
 
-        const deduped = safeStage("deduplicate", () => deduplicate(filtered, tool), { deduped: false, result: filtered })
+        const deduped = safeStage("deduplicate", () => deduplicate(sessionID, filtered, tool), { deduped: false, result: filtered })
         filtered = deduped.result
 
         const afterTokens = safeEstimateTokens(filtered)
         const saved = beforeTokens - afterTokens
 
         if (saved > 0) {
-          trackTokensSaved(saved)
-          updateContext(afterTokens)
+          trackTokensSaved(sessionID, saved)
+          updateContext(sessionID, afterTokens)
 
           const family = tool === "bash" ? detectFamily(String(input.args?.command || "")) : tool
 
@@ -606,20 +633,33 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
               after_tokens: afterTokens,
               saved_pct: Math.round((saved / beforeTokens) * 100),
             }), undefined)
-            // Keep stats-summary.json fresh for TUI and opentoken_stats command
+            // Keep stats-summary.json and session-memory.json fresh for TUI
             await safeStageAsync("saveStatsSummary", () => saveStatsSummary(), undefined)
           }
 
-          await safeStageAsync("writeSessionState", () => writeSessionState(directory), undefined)
-
-          // Don't inject status line into LLM output — TUI bar handles display
-          const sessionTracker = getSessionTracker()
+          // Record metrics (don't inject status line into LLM output — TUI bar handles display)
+          const sessionTracker = getSessionTracker(sessionID)
         }
+
+        // Ensure session-start.json exists (fallback if session.created didn't fire)
+        // Must run outside if (saved > 0) so it works even when first calls save nothing
+        const startFile = path.join(os.homedir(), ".config", "opentoken", "session-start.json")
+        try {
+          const f = Bun.file(startFile)
+          if (!(await f.exists())) {
+            const tmp = startFile + ".tmp"
+            await Bun.write(tmp, JSON.stringify({ sessionStart: Date.now() }))
+            fs.renameSync(tmp, startFile)
+          }
+        } catch { /* ignore */ }
+
+        // Write session state after every call so TUI gets fresh compression level
+        await safeStageAsync("writeSessionState", () => writeSessionState(sessionID, directory, getCompressionLevel(sessionID)), undefined)
 
         output.output = filtered
 
         // De-escalate compression when context pressure eases
-        deescalate()
+        deescalate(sessionID)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         console.error(`[OpenToken] tool.execute.after error: ${msg}`)
@@ -671,7 +711,7 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
             }
             lines.push("")
             lines.push(`  Config: metrics=${config.enableMetrics}, symbols=${config.enableSymbolIndex}`)
-            lines.push(`  Context: ${getCompressionLevel()}`)
+            lines.push(`  Context: ${getCompressionLevel(directory)}`)
             return { output: lines.join("\n") }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err)
@@ -679,6 +719,80 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
           }
         },
       }),
+    },
+
+    // ─── PHASE 7: EXPERIMENTAL HOOKS ───
+    // Kill switch: all disabled if enableHistoryCompression is false
+
+    // Compress conversation messages before sending to LLM
+    // MUST mutate in-place via splice (output.messages = newArray is a silent no-op)
+    "experimental.chat.messages.transform": async (_input, output) => {
+      if (!config.enableHistoryCompression) return
+
+      try {
+        compressMessagesInPlace(output.messages, {
+          window: config.historyCompressionWindow,
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`[OpenToken] chat.messages.transform error: ${msg}`)
+      }
+    },
+
+    // Customize compaction prompt + write session memory
+    "experimental.session.compacting": async (input, output) => {
+      if (!config.enableHistoryCompression) return
+
+      try {
+        // Native compaction freed context — reset escalation tracking
+        resetContextUsed(sessionID)
+
+        // Generate session summary from metrics
+        const tracker = getSessionTracker(sessionID)
+        const summary = generateSessionSummary(sessionID, tracker.tokensSaved, tracker.toolCalls)
+        if (summary) {
+          // Inject into compaction context
+          output.context.push(`\n## OpenToken Session Summary\n${summary}`)
+
+          // Write to cross-session memory
+          if (config.enableSessionMemory) {
+            writeSessionSummary(input.sessionID, directory, summary)
+          }
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`[OpenToken] session.compacting error: ${msg}`)
+      }
+    },
+
+    // Inject session memory into system prompt
+    "experimental.chat.system.transform": async (input, output) => {
+      if (!config.enableHistoryCompression) return
+
+      try {
+        // Inject session memory if enabled
+        if (config.enableSessionMemory) {
+          const stats = getMemoryStats()
+          if (stats.total > 0) {
+            // Extract keywords from the latest user message
+            const latestUserMsg = input as any
+            const keywords = latestUserMsg?.message?.content
+              ? extractContextKeywords(latestUserMsg.message.content)
+              : []
+
+            const relevant = getRelevantSummaries(directory, keywords, 3)
+            if (relevant.length > 0) {
+              const memoryPrompt = buildMemoryPrompt(relevant)
+              if (memoryPrompt) {
+                output.system.push(memoryPrompt)
+              }
+            }
+          }
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`[OpenToken] chat.system.transform error: ${msg}`)
+      }
     },
   }
 }

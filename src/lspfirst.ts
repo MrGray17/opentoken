@@ -1,9 +1,9 @@
 // LSP-First Enforcement — inspired by lsp-enforcement-kit
 // Block Grep/Glob calls on code symbol patterns, force LSP tools instead
 // 80% savings on navigation
+// Session-keyed to prevent cross-session state corruption
 
-import path from "path"
-import os from "os"
+import { SessionStore } from "./utils/session-store"
 
 interface LSPState {
   navCount: number
@@ -12,8 +12,19 @@ interface LSPState {
   project: string
 }
 
-const LSP_STATE_DIR = path.join(os.homedir(), ".config", "opentoken", "lsp")
-const lspStates = new Map<string, LSPState>()
+function createLSPState(project: string): LSPState {
+  return {
+    navCount: 0,
+    readCount: 0,
+    lastNavTime: 0,
+    project}
+}
+
+const store = new SessionStore<LSPState>()
+
+function getState(sessionID: string, project: string): LSPState {
+  return store.get(sessionID, () => createLSPState(project))
+}
 
 // Detect if a grep query is looking for a code symbol
 function isSymbolQuery(query: string): boolean {
@@ -28,8 +39,7 @@ function isSymbolQuery(query: string): boolean {
     /\w+::[A-Z]\w+/,
     /\w+\.[A-Z]\w+/,
     // Type annotations with generics: List[str], Map<K,V>
-    /\w+<\w+.*>/,
-  ]
+    /\w+<\w+.*>/]
 
   return patterns.some((p) => p.test(query))
 }
@@ -49,8 +59,7 @@ function isSymbolGlob(query: string): boolean {
     /\*spec\*/,
     // Looking for config files
     /\*config\*/,
-    /\*settings\*/,
-  ]
+    /\*settings\*/]
 
   return patterns.some((p) => p.test(query))
 }
@@ -60,8 +69,7 @@ export function shouldBlockGrep(query: string): { blocked: boolean; suggestion?:
   if (isSymbolQuery(query)) {
     return {
       blocked: true,
-      suggestion: `Use LSP tools instead of grep for symbol "${query}":\n- find_definition("${query}")\n- find_references("${query}")\n- get_hover("${query}")`,
-    }
+      suggestion: `Use LSP tools instead of grep for symbol "${query}":\n- find_definition("${query}")\n- find_references("${query}")\n- get_hover("${query}")`}
   }
 
   return { blocked: false }
@@ -72,8 +80,7 @@ export function shouldBlockGlob(query: string): { blocked: boolean; suggestion?:
   if (isSymbolGlob(query)) {
     return {
       blocked: true,
-      suggestion: `Use LSP workspace symbols instead of glob for "${query}":\n- find_workspace_symbols("${query}")`,
-    }
+      suggestion: `Use LSP workspace symbols instead of glob for "${query}":\n- find_workspace_symbols("${query}")`}
   }
 
   return { blocked: false }
@@ -84,27 +91,20 @@ export function shouldBlockShellGrep(command: string): { blocked: boolean; sugge
   const grepPatterns = [
     /(?:grep|rg|ag|ack)\s+.*\b(class|interface|struct|enum|def|fn|func|function)\s+\w+/,
     /(?:grep|rg|ag|ack)\s+.*@\w+/,
-    /(?:grep|rg|ag|ack)\s+.*\w+::[A-Z]\w+/,
-  ]
+    /(?:grep|rg|ag|ack)\s+.*\w+::[A-Z]\w+/]
 
   if (grepPatterns.some((p) => p.test(command))) {
     return {
       blocked: true,
-      suggestion: "Use LSP tools instead of shell grep for code symbols",
-    }
+      suggestion: "Use LSP tools instead of shell grep for code symbols"}
   }
 
   return { blocked: false }
 }
 
 // Track LSP usage
-export function trackLSPUsage(project: string, tool: string): void {
-  const state = lspStates.get(project) || {
-    navCount: 0,
-    readCount: 0,
-    lastNavTime: 0,
-    project,
-  }
+export function trackLSPUsage(sessionID: string, project: string, tool: string): void {
+  const state = getState(sessionID, project)
 
   if (tool.includes("find_") || tool.includes("get_")) {
     state.navCount++
@@ -113,15 +113,9 @@ export function trackLSPUsage(project: string, tool: string): void {
   }
 
   state.lastNavTime = Date.now()
-  lspStates.set(project, state)
 }
 
 // Reset LSP state for new session
-export function resetLSPState(project: string): void {
-  lspStates.set(project, {
-    navCount: 0,
-    readCount: 0,
-    lastNavTime: 0,
-    project,
-  })
+export function resetLSPState(sessionID: string, _project: string): void {
+  store.delete(sessionID)
 }

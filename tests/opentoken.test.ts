@@ -1,7 +1,12 @@
 // OpenToken — Test Suite
 // Validates all 24 layers work correctly
 
-import { describe, it, expect } from "bun:test"
+import { describe, it, expect, afterEach } from "bun:test"
+import path from "path"
+import os from "os"
+import fs from "fs"
+
+const TEST_SESSION = "test-session"
 
 // Phase 1 imports
 import { preCallFilter, rewriteCommand, isMinifiedOrGenerated } from "../src/precall"
@@ -108,34 +113,34 @@ describe("L11: Key Aliasing", () => {
 
 describe("L12: Cross-Call Dedup", () => {
   it("deduplicates identical output", () => {
-    resetDedup()
+    resetDedup(TEST_SESSION)
     const output = "git status output"
-    const first = deduplicate(output, "bash")
+    const first = deduplicate(TEST_SESSION, output, "bash")
     expect(first.deduped).toBe(false)
-    const second = deduplicate(output, "bash")
+    const second = deduplicate(TEST_SESSION, output, "bash")
     expect(second.deduped).toBe(true)
   })
 })
 
 describe("L14: Auto-Escalation", () => {
   it("starts at off", () => {
-    resetEscalation()
-    expect(getCompressionLevel()).toBe("off")
+    resetEscalation(TEST_SESSION)
+    expect(getCompressionLevel(TEST_SESSION)).toBe("off")
   })
   it("escalates to lean at 50%", () => {
-    resetEscalation()
-    updateContext(100000, 200000)
-    expect(getCompressionLevel()).toBe("lean")
+    resetEscalation(TEST_SESSION)
+    updateContext(TEST_SESSION, 100000, 200000)
+    expect(getCompressionLevel(TEST_SESSION)).toBe("lean")
   })
   it("escalates to ultra at 70%", () => {
-    resetEscalation()
-    updateContext(140000, 200000)
-    expect(getCompressionLevel()).toBe("ultra")
+    resetEscalation(TEST_SESSION)
+    updateContext(TEST_SESSION, 140000, 200000)
+    expect(getCompressionLevel(TEST_SESSION)).toBe("ultra")
   })
   it("escalates to ceiling at 85%", () => {
-    resetEscalation()
-    updateContext(170000, 200000)
-    expect(getCompressionLevel()).toBe("ceiling")
+    resetEscalation(TEST_SESSION)
+    updateContext(TEST_SESSION, 170000, 200000)
+    expect(getCompressionLevel(TEST_SESSION)).toBe("ceiling")
   })
 })
 
@@ -566,28 +571,28 @@ describe("Post-Call Process", () => {
 
 describe("Status Line", () => {
   it("generates status line for high savings", () => {
-    resetStatusLine()
+    resetStatusLine(TEST_SESSION)
     // Status line shows every 3rd call
-    generateStatusLine(5000, 10000, 15000) // call 1
-    generateStatusLine(5000, 10000, 20000) // call 2
-    const status = generateStatusLine(5000, 10000, 25000) // call 3
+    generateStatusLine(TEST_SESSION, 5000, 10000, 15000) // call 1
+    generateStatusLine(TEST_SESSION, 5000, 10000, 20000) // call 2
+    const status = generateStatusLine(TEST_SESSION, 5000, 10000, 25000) // call 3
     expect(status).not.toBeNull()
     expect(status?.text).toContain("tokens")
     expect(status?.text).toMatch(/[✨🌟💎🦋🌺🌸🍃🌙]/)
   })
   it("skips status line for low savings", () => {
-    resetStatusLine()
-    const status = generateStatusLine(50, 1000, 100)
+    resetStatusLine(TEST_SESSION)
+    const status = generateStatusLine(TEST_SESSION, 50, 1000, 100)
     expect(status).toBeNull()
   })
   it("shows every 3rd call", () => {
-    resetStatusLine()
-    const s1 = generateStatusLine(5000, 10000, 15000) // call 1
-    const s2 = generateStatusLine(5000, 10000, 20000) // call 2
-    const s3 = generateStatusLine(5000, 10000, 25000) // call 3
-    const s4 = generateStatusLine(5000, 10000, 30000) // call 4
-    const s5 = generateStatusLine(5000, 10000, 35000) // call 5
-    const s6 = generateStatusLine(5000, 10000, 40000) // call 6
+    resetStatusLine(TEST_SESSION)
+    const s1 = generateStatusLine(TEST_SESSION, 5000, 10000, 15000) // call 1
+    const s2 = generateStatusLine(TEST_SESSION, 5000, 10000, 20000) // call 2
+    const s3 = generateStatusLine(TEST_SESSION, 5000, 10000, 25000) // call 3
+    const s4 = generateStatusLine(TEST_SESSION, 5000, 10000, 30000) // call 4
+    const s5 = generateStatusLine(TEST_SESSION, 5000, 10000, 35000) // call 5
+    const s6 = generateStatusLine(TEST_SESSION, 5000, 10000, 40000) // call 6
     expect(s1).toBeNull()
     expect(s2).toBeNull()
     expect(s3).not.toBeNull()
@@ -596,7 +601,7 @@ describe("Status Line", () => {
     expect(s6).not.toBeNull()
   })
   it("generates session summary", () => {
-    const summary = generateSessionSummary(50000, 25)
+    const summary = generateSessionSummary(TEST_SESSION, 50000, 25)
     expect(summary).toContain("tokens")
     expect(summary).toContain("calls")
     expect(summary).toMatch(/[✨🌟💎🦋🌺🌸🍃🌙]/)
@@ -605,20 +610,20 @@ describe("Status Line", () => {
 
 describe("Auto-Escalation De-escalation", () => {
   it("de-escalates from ceiling when fill drops", () => {
-    resetEscalation()
-    updateContext(170000) // 85% fill → ceiling
-    expect(getCompressionLevel()).toBe("ceiling")
+    resetEscalation(TEST_SESSION)
+    updateContext(TEST_SESSION, 170000) // 85% fill → ceiling
+    expect(getCompressionLevel(TEST_SESSION)).toBe("ceiling")
     // Simulate context reset (de-escalate checks fillPct)
-    const level = deescalate()
+    const level = deescalate(TEST_SESSION)
     // fillPct is still high, so level stays same unless we reset context
     expect(level).toBe("ceiling")
   })
   it("de-escalates from ultra to lean when fill drops below 80%", () => {
-    resetEscalation()
-    updateContext(140000) // 70% fill → ultra
-    expect(getCompressionLevel()).toBe("ultra")
+    resetEscalation(TEST_SESSION)
+    updateContext(TEST_SESSION, 140000) // 70% fill → ultra
+    expect(getCompressionLevel(TEST_SESSION)).toBe("ultra")
     // De-escalate: fillPct 0.70 < 0.80, so ultra → lean
-    const level = deescalate()
+    const level = deescalate(TEST_SESSION)
     expect(level).toBe("lean")
   })
 })
@@ -807,6 +812,10 @@ describe("Metrics Aggregation", () => {
 })
 
 describe("Error Logging", () => {
+  const ERROR_FILE = path.join(os.homedir(), ".config", "opentoken", "error.jsonl")
+  afterEach(() => {
+    try { fs.writeFileSync(ERROR_FILE, "") } catch {}
+  })
   it("logs an error entry", () => {
     logError({
       ts: new Date().toISOString(),
@@ -815,10 +824,16 @@ describe("Error Logging", () => {
       error: "Test error message",
       recoverable: true,
     })
-    // Should not throw
     expect(true).toBe(true)
   })
   it("returns error summary", () => {
+    logError({
+      ts: new Date().toISOString(),
+      stage: "testStage",
+      tool: "bash",
+      error: "Test error message",
+      recoverable: true,
+    })
     const summary = getErrorSummary()
     expect(summary).toHaveProperty("total")
     expect(summary).toHaveProperty("byStage")

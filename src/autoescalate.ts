@@ -5,10 +5,11 @@
 // 85% fill → DYNAMIC CEILING (force aggressive truncation)
 
 import { estimateTokens } from "./utils/tokens"
+import { SessionStore } from "./utils/session-store"
 
 export type CompressionLevel = "off" | "lean" | "ultra" | "ceiling"
 
-interface EscalationState {
+export interface EscalationState {
   level: CompressionLevel
   contextUsed: number
   contextTotal: number
@@ -19,33 +20,56 @@ interface EscalationState {
 // Estimated context window size (varies by model)
 const DEFAULT_CONTEXT_SIZE = 200_000 // ~200K tokens (Sonnet)
 
-const state: EscalationState = {
-  level: "off",
-  contextUsed: 0,
-  contextTotal: DEFAULT_CONTEXT_SIZE,
-  fillPct: 0,
-  history: [],
+function createEscalationState(): EscalationState {
+  return {
+    level: "off",
+    contextUsed: 0,
+    contextTotal: DEFAULT_CONTEXT_SIZE,
+    fillPct: 0,
+    history: []}
+}
+
+const store = new SessionStore<EscalationState>()
+
+function getState(sessionID: string): EscalationState {
+  return store.get(sessionID, createEscalationState)
 }
 
 // Update context tracking — accumulates token usage across calls
 // Each tool output adds tokens to the LLM context window
-export function updateContext(used: number, total?: number): CompressionLevel {
-  if (total) state.contextTotal = total
-  state.contextUsed += used
-  state.fillPct = state.contextUsed / state.contextTotal
+export function updateContext(sessionID: string, used: number, total?: number): CompressionLevel {
+  const s = getState(sessionID)
+  if (total) s.contextTotal = total
+  s.contextUsed += used
+  s.fillPct = s.contextTotal > 0 ? s.contextUsed / s.contextTotal : 0
 
-  const newLevel = computeLevel(state.fillPct)
+  const newLevel = computeLevel(s.fillPct)
 
-  if (newLevel !== state.level) {
-    state.level = newLevel
-    state.history.push({
+  if (newLevel !== s.level) {
+    s.level = newLevel
+    s.history.push({
       level: newLevel,
-      fillPct: state.fillPct,
-      timestamp: Date.now(),
-    })
+      fillPct: s.fillPct,
+      timestamp: Date.now()})
   }
 
   return newLevel
+}
+
+// Reset context usage tracking — called when native compaction frees context
+// This prevents fillPct from staying artificially high after compaction
+export function resetContextUsed(sessionID: string): void {
+  const s = getState(sessionID)
+  s.contextUsed = 0
+  s.fillPct = 0
+  const newLevel = computeLevel(s.fillPct)
+  if (newLevel !== s.level) {
+    s.level = newLevel
+    s.history.push({
+      level: newLevel,
+      fillPct: s.fillPct,
+      timestamp: Date.now()})
+  }
 }
 
 // Compute compression level from fill percentage
@@ -57,32 +81,26 @@ function computeLevel(fillPct: number): CompressionLevel {
 }
 
 // Get current compression level
-export function getCompressionLevel(): CompressionLevel {
-  return state.level
+export function getCompressionLevel(sessionID: string): CompressionLevel {
+  return getState(sessionID).level
 }
 
 // Get escalation state
-export function getEscalationState(): EscalationState {
-  return { ...state }
+export function getEscalationState(sessionID: string): EscalationState {
+  return { ...getState(sessionID) }
 }
 
 // Apply compression based on current level
 export function applyAutoEscalation(text: string, level?: CompressionLevel): string {
-  const effectiveLevel = level || state.level
-
-  switch (effectiveLevel) {
+  switch (level) {
     case "off":
       return text
-
     case "lean":
       return applyLeanCompression(text)
-
     case "ultra":
       return applyUltraCompression(text)
-
     case "ceiling":
       return applyCeilingCompression(text)
-
     default:
       return text
   }
@@ -119,7 +137,7 @@ function applyLeanCompression(text: string): string {
     "implement": "add",
     "implements": "adds",
     "implementing": "adding",
-    "implementation": "impl",
+    "impl": "impl",
     "functionality": "feature",
     "approximately": "~",
     "subsequently": "then",
@@ -143,7 +161,7 @@ function applyLeanCompression(text: string): string {
     "necessary": "needed",
     "required": "needed",
     "optional": "opt",
-    "available": "avail",
+    "avail": "avail",
     "appropriate": "right",
     "suitable": "fit",
     "relevant": "rel",
@@ -152,8 +170,7 @@ function applyLeanCompression(text: string): string {
     "pertaining": "re",
     "with respect to": "re",
     "in terms of": "re",
-    "in relation to": "re",
-  }
+    "in relation to": "re"}
 
   for (const [full, short] of Object.entries(synonyms)) {
     result = result.replace(new RegExp(`\\b${full}\\b`, "gi"), short)
@@ -216,8 +233,7 @@ function applyUltraCompression(text: string): string {
     [/\band so on\b/gi, "etc"],
     [/\bper second\b/gi, "/s"],
     [/\bper minute\b/gi, "/min"],
-    [/\bper hour\b/gi, "/hr"],
-  ]
+    [/\bper hour\b/gi, "/hr"]]
 
   for (const [pattern, replacement] of phraseReplacements) {
     result = result.replace(pattern, replacement)
@@ -275,38 +291,33 @@ function applyCeilingCompression(text: string): string {
 }
 
 // Reset escalation state (new session)
-export function resetEscalation(): void {
-  state.level = "off"
-  state.contextUsed = 0
-  state.fillPct = 0
-  state.history = []
+export function resetEscalation(sessionID: string): void {
+  store.reset(sessionID, createEscalationState)
 }
 
 // De-escalate compression level when context fill percentage drops
 // Called periodically to reduce compression when pressure eases
-export function deescalate(): CompressionLevel {
+export function deescalate(sessionID: string): CompressionLevel {
+  const s = getState(sessionID)
   // If fill percentage dropped below a threshold, step down one level
-  if (state.fillPct < 0.45 && state.level !== "off") {
-    state.level = "off"
-    state.history.push({
+  if (s.fillPct < 0.45 && s.level !== "off") {
+    s.level = "off"
+    s.history.push({
       level: "off",
-      fillPct: state.fillPct,
-      timestamp: Date.now(),
-    })
-  } else if (state.fillPct < 0.65 && state.level === "ceiling") {
-    state.level = "ultra"
-    state.history.push({
+      fillPct: s.fillPct,
+      timestamp: Date.now()})
+  } else if (s.fillPct < 0.65 && s.level === "ceiling") {
+    s.level = "ultra"
+    s.history.push({
       level: "ultra",
-      fillPct: state.fillPct,
-      timestamp: Date.now(),
-    })
-  } else if (state.fillPct < 0.80 && state.level === "ultra") {
-    state.level = "lean"
-    state.history.push({
+      fillPct: s.fillPct,
+      timestamp: Date.now()})
+  } else if (s.fillPct < 0.80 && s.level === "ultra") {
+    s.level = "lean"
+    s.history.push({
       level: "lean",
-      fillPct: state.fillPct,
-      timestamp: Date.now(),
-    })
+      fillPct: s.fillPct,
+      timestamp: Date.now()})
   }
-  return state.level
+  return s.level
 }

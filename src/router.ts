@@ -83,11 +83,45 @@ const TYPE_PATTERNS: { type: ContentType; pattern: RegExp; weight: number }[] = 
   { type: "shell", pattern: /^\$ |^#!/m, weight: 3 },
 ]
 
-function detectType(content: string): ContentType {
+// File extension to content type mapping — strong signal for type detection
+const EXT_TO_TYPE: Record<string, ContentType> = {
+  json: "json",
+  jsonl: "json",
+  yaml: "yaml",
+  yml: "yaml",
+  xml: "xml",
+  html: "html",
+  htm: "html",
+  csv: "csv",
+  sql: "sql",
+  md: "markdown",
+  mdx: "markdown",
+  diff: "diff",
+  patch: "diff",
+  log: "log",
+  sh: "shell",
+  bash: "shell",
+  zsh: "shell",
+  toml: "config",
+  ini: "config",
+  cfg: "config",
+  conf: "config",
+}
+
+function detectType(content: string, filePath?: string): ContentType {
   const scores = new Map<ContentType, number>()
   for (const { type, pattern, weight } of TYPE_PATTERNS) {
     if (pattern.test(content)) {
       scores.set(type, (scores.get(type) || 0) + weight)
+    }
+  }
+
+  // File extension is a strong signal — boost matching type by 10
+  if (filePath) {
+    const ext = filePath.split(".").pop()?.toLowerCase() || ""
+    const extType = EXT_TO_TYPE[ext]
+    if (extType) {
+      scores.set(extType, (scores.get(extType) || 0) + 10)
     }
   }
 
@@ -135,8 +169,8 @@ export function analyzeContent(content: string, filePath?: string): ContentAnaly
     language = EXT_TO_LANG[ext] || "unknown"
   }
 
-  // Detect content type using scored matching
-  let type = detectType(content)
+  // Detect content type using scored matching + file extension signal
+  let type = detectType(content, filePath)
 
   // If type is code, try to detect language
   if (type === "text" && language === "unknown") {

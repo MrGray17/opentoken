@@ -2,13 +2,15 @@
 set -euo pipefail
 
 # OpenToken installer — downloads plugin into OpenCode plugin directory
+# VERSION: Update this when releasing a new version
+OPENTOKEN_VERSION="${OPENTOKEN_VERSION:-1.1.0}"
 
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opentoken"
 PLUGIN_FILE="${HOME}/.config/opencode/plugins/opentoken.ts"
 TUI_FILE="${HOME}/.config/opencode/plugins/opentoken-tui.tsx"
 TUI_CONFIG="${HOME}/.config/opencode/tui.json"
 
-echo "Installing OpenToken..."
+echo "Installing OpenToken v${OPENTOKEN_VERSION}..."
 
 # Clean previous install
 if [ -d "$PLUGIN_DIR" ]; then
@@ -24,9 +26,18 @@ fi
 
 mkdir -p "$PLUGIN_DIR"
 
-# Download latest source
+# Download from tagged release (not main branch) for reproducible installs
 TMPDIR=$(mktemp -d)
-curl -fsSL https://github.com/MrGray17/opentoken/archive/refs/heads/main.tar.gz | tar xz -C "$TMPDIR" --strip-components=1
+DOWNLOAD_URL="https://github.com/MrGray17/opentoken/archive/refs/tags/v${OPENTOKEN_VERSION}.tar.gz"
+
+echo "Downloading from ${DOWNLOAD_URL}..."
+if ! curl -fsSL "$DOWNLOAD_URL" | tar xz -C "$TMPDIR" --strip-components=1 2>/dev/null; then
+  echo "ERROR: Failed to download OpenToken v${OPENTOKEN_VERSION}"
+  echo "Check that the version tag exists: https://github.com/MrGray17/opentoken/releases"
+  echo "Or set a different version: OPENTOKEN_VERSION=1.0.0 bash install.sh"
+  rm -rf "$TMPDIR"
+  exit 1
+fi
 
 # Copy plugin source into subdirectory
 cp -r "$TMPDIR/src/"* "$PLUGIN_DIR/"
@@ -47,7 +58,7 @@ sed -i 's|from "./|from "./opentoken/|g' "$TUI_FILE"
 # Includes TUI deps for status bar plugin
 cat > "$PLUGIN_DIR/package.json" << 'EOF'
 {
-  "dependencies": {
+  "deps": {
     "@opencode-ai/plugin": "^1.15.5",
     "@opentui/solid": "^0.2.14",
     "@opentui/core": "^0.2.14",
@@ -106,7 +117,7 @@ fi
 # Cleanup
 rm -rf "$TMPDIR"
 
-echo "OpenToken installed to $PLUGIN_DIR"
+echo "OpenToken v${OPENTOKEN_VERSION} installed to $PLUGIN_DIR"
 echo "Server entry point: $PLUGIN_FILE"
 echo "TUI entry point: $TUI_FILE"
 echo "Restart opencode to activate."

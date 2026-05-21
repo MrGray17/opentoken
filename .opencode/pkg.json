@@ -1,0 +1,9 @@
+{
+  "name": "opentoken",
+  "version": "1.0.0",
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.15.5",
+    "@opentui/solid": "^0.2.14",
+    "solid-js": "^1.9.13"
+  }
+}

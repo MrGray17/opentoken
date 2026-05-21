@@ -1,14 +1,15 @@
 // Reversible Compression — inspired by claw-compactor's RewindStore
 // Aggressively compress content but store originals in hash-addressed store
 // LLM can retrieve any compressed section by its marker ID
+// Session-keyed to prevent cross-session data leakage
 
 import path from "path"
 import os from "os"
 import crypto from "crypto"
+import { SessionStore } from "./utils/session-store"
 
 const REWIND_DIR = path.join(os.homedir(), ".config", "opentoken", "rewind")
 const MAX_COMPRESSED_SIZE = 15 * 1024 // 15KB — compress anything larger
-const MAX_REWIND_ENTRIES = 50 // Cap entries to prevent unbounded memory growth
 
 interface RewindEntry {
   id: string
@@ -20,18 +21,30 @@ interface RewindEntry {
   compressedSize: number
 }
 
-const rewindStore = new Map<string, RewindEntry>()
-let rewindCounter = 0
+interface RewindState {
+  store: Map<string, RewindEntry>
+  counter: number
+}
+
+function createRewindState(): RewindState {
+  return { store: new Map(), counter: 0 }
+}
+
+const store = new SessionStore<RewindState>()
+
+function getState(sessionID: string): RewindState {
+  return store.get(sessionID, createRewindState)
+}
 
 // Generate a unique rewind ID
-function generateId(): string {
-  rewindCounter++
-  const hash = crypto.createHash("md5").update(`${Date.now()}-${rewindCounter}`).digest("hex").slice(0, 8)
+function generateId(state: RewindState): string {
+  state.counter++
+  const hash = crypto.createHash("md5").update(`${Date.now()}-${state.counter}`).digest("hex").slice(0, 8)
   return `rw-${hash}`
 }
 
 // Compress content and store original
-export async function compressAndStore(content: string): Promise<{
+export async function compressAndStore(sessionID: string, content: string): Promise<{
   compressed: string
   marker: string
   entryId: string
@@ -39,7 +52,8 @@ export async function compressAndStore(content: string): Promise<{
 }> {
   await ensureDir()
 
-  const id = generateId()
+  const state = getState(sessionID)
+  const id = generateId(state)
   const marker = `[COMPRESSED:${id}]`
 
   // Store the original
@@ -50,8 +64,7 @@ export async function compressAndStore(content: string): Promise<{
     marker,
     timestamp: Date.now(),
     size: content.length,
-    compressedSize: 0,
-  }
+    compressedSize: 0}
 
   try {
     await Bun.write(path.join(REWIND_DIR, `${id}.txt`), content)
@@ -61,13 +74,7 @@ export async function compressAndStore(content: string): Promise<{
 
   // Calculate compressed size
   entry.compressedSize = entry.compressed.length
-  rewindStore.set(id, entry)
-
-  // Evict oldest entries if over capacity
-  while (rewindStore.size > MAX_REWIND_ENTRIES) {
-    const oldestKey = rewindStore.keys().next().value
-    if (oldestKey) rewindStore.delete(oldestKey)
-  }
+  state.store.set(id, entry)
 
   const compressionRatio = content.length > 0
     ? Math.round((1 - entry.compressedSize / content.length) * 100)
@@ -77,8 +84,7 @@ export async function compressAndStore(content: string): Promise<{
     compressed: entry.compressed,
     marker,
     entryId: id,
-    compressionRatio,
-  }
+    compressionRatio}
 }
 
 // Compress content using head+tail extraction — preserves structure while dropping interior
@@ -97,7 +103,7 @@ function compressContent(content: string): string {
 }
 
 // Apply reversible compression to content
-export async function applyReversibleCompression(content: string): Promise<{
+export async function applyReversibleCompression(sessionID: string, content: string): Promise<{
   result: string
   compressed: boolean
   entryId?: string
@@ -106,21 +112,21 @@ export async function applyReversibleCompression(content: string): Promise<{
     return { result: content, compressed: false }
   }
 
-  const { compressed, marker, entryId, compressionRatio } = await compressAndStore(content)
+  const { compressed, marker, entryId, compressionRatio } = await compressAndStore(sessionID, content)
 
   return {
     result: `${marker} (${compressionRatio}% compressed, ${Math.round(content.length / 1024)}KB → ${Math.round(compressed.length / 1024)}KB)\n\n${compressed}\n\nUse "opentoken rewind ${entryId}" to retrieve full content.`,
     compressed: true,
-    entryId,
-  }
+    entryId}
 }
 
 // Clean up old rewind entries
-export async function cleanupRewind(maxAgeMs = 3600000): Promise<number> {
+export async function cleanupRewind(sessionID: string, maxAgeMs = 3600000): Promise<number> {
+  const state = getState(sessionID)
   let cleaned = 0
   const now = Date.now()
 
-  for (const [id, entry] of rewindStore.entries()) {
+  for (const [id, entry] of state.store.entries()) {
     if (now - entry.timestamp > maxAgeMs) {
       try {
         const filePath = path.join(REWIND_DIR, `${id}.txt`)
@@ -131,7 +137,7 @@ export async function cleanupRewind(maxAgeMs = 3600000): Promise<number> {
       } catch {
         // Ignore
       }
-      rewindStore.delete(id)
+      state.store.delete(id)
       cleaned++
     }
   }
