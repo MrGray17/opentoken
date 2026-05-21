@@ -12,6 +12,7 @@ import { preCallFilter } from "./precall"
 import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content, normalizeWhitespace, normalizeLogNoise, minimizeTableWhitespace, minifyJSON } from "./postcall"
 import { convertToTOON } from "./toon"
 import { compressLTSC } from "./ltsc"
+import { compressLZW } from "./lzw"
 import { deduplicate, resetDedup } from "./dedup"
 import { progressiveDisclosure, cleanupOffloaded } from "./progressive"
 import { applyAutoEscalation, deescalate, updateContext, getCompressionLevel, resetEscalation, resetContextUsed } from "./autoescalate"
@@ -343,6 +344,10 @@ async function applyBashFilter(sessionID: string, command: string, output: strin
   const ltsc = safeStage("compressLTSC", () => compressLTSC(filtered), { compressed: false, result: filtered, savings: 0 })
   if (ltsc.compressed) filtered = ltsc.result
 
+  // LZW: Token substitution for repetitive content (stack traces, error logs)
+  const lzw = safeStage("compressLZW", () => compressLZW(filtered), { compressed: false, result: filtered, savings: 0 })
+  if (lzw.compressed) filtered = lzw.result
+
   return conservativeFilter(output, filtered)
 }
 
@@ -426,6 +431,10 @@ async function applyReadFilter(sessionID: string, filePath: string, content: str
   const ltsc = safeStage("compressLTSC", () => compressLTSC(filtered), { compressed: false, result: filtered, savings: 0 })
   if (ltsc.compressed) filtered = ltsc.result
 
+  // LZW: Token substitution for repetitive content (stack traces, error logs)
+  const lzw = safeStage("compressLZW", () => compressLZW(filtered), { compressed: false, result: filtered, savings: 0 })
+  if (lzw.compressed) filtered = lzw.result
+
   await safeStageAsync("setCachedRead", () => setCachedRead(sessionID, filePath, filtered), undefined)
 
   return conservativeFilter(content, filtered)
@@ -476,6 +485,10 @@ async function applyGrepFilter(sessionID: string, output: string): Promise<strin
   const ltsc = safeStage("compressLTSC", () => compressLTSC(filtered), { compressed: false, result: filtered, savings: 0 })
   if (ltsc.compressed) filtered = ltsc.result
 
+  // LZW: Token substitution for repetitive content (stack traces, error logs)
+  const lzw = safeStage("compressLZW", () => compressLZW(filtered), { compressed: false, result: filtered, savings: 0 })
+  if (lzw.compressed) filtered = lzw.result
+
   return conservativeFilter(output, filtered)
 }
 
@@ -515,6 +528,10 @@ async function applyGlobFilter(sessionID: string, output: string): Promise<strin
   // LTSC: Lossless Token Sequence Compression (LZ77-style, 18-27% savings)
   const ltsc = safeStage("compressLTSC", () => compressLTSC(filtered), { compressed: false, result: filtered, savings: 0 })
   if (ltsc.compressed) filtered = ltsc.result
+
+  // LZW: Token substitution for repetitive content (stack traces, error logs)
+  const lzw = safeStage("compressLZW", () => compressLZW(filtered), { compressed: false, result: filtered, savings: 0 })
+  if (lzw.compressed) filtered = lzw.result
 
   return conservativeFilter(output, filtered)
 }

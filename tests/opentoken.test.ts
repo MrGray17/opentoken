@@ -32,6 +32,7 @@ import { extractSkeleton } from "../src/skeleton"
 import { foldDiff, foldLogs, foldDiffAndLogs } from "../src/folding"
 import { sampleJson } from "../src/jsonsample"
 import { applyReversibleCompression, cleanupRewind } from "../src/rewind"
+import { compressLZW, decompressLZW } from "../src/lzw"
 import { analyzeContent, getCompressionPipeline } from "../src/router"
 import { indexDirectory, loadIndex } from "../src/symbolindex"
 import { shouldBlockGrep, shouldBlockGlob, shouldBlockShellGrep } from "../src/lspfirst"
@@ -658,6 +659,49 @@ describe("L31: JSON Minification", () => {
     const input = '{ "outer": { "inner": { "value": 42 } } }'
     const result = minifyJSON(input)
     expect(result).toBe('{"outer":{"inner":{"value":42}}}')
+  })
+})
+
+describe("L32: LZW Token Substitution", () => {
+  it("compresses repeated file paths", () => {
+    const path = "/Users/dev/project/node_modules/@jest/core/build/cli/index.js"
+    const input = `Error at ${path}:45\nError at ${path}:112\nError at ${path}:200\nError at ${path}:350`
+    const result = compressLZW(input)
+    expect(result.compressed).toBe(true)
+    expect(result.result).toContain("$1 =")
+    expect(result.result).toContain("$1")
+    // Verify lossless roundtrip
+    expect(decompressLZW(result.result)).toBe(input)
+  })
+  it("compresses repeated error prefixes", () => {
+    const prefix = "TimeoutError: Connection refused at "
+    const input = `${prefix}module1\n${prefix}module2\n${prefix}module3\n${prefix}module4`
+    const result = compressLZW(input)
+    expect(result.compressed).toBe(true)
+    expect(result.result).toContain("$1 =")
+    expect(decompressLZW(result.result)).toBe(input)
+  })
+  it("does not compress unique content", () => {
+    const input = "Hello world, this is unique content with no repetition"
+    const result = compressLZW(input)
+    expect(result.compressed).toBe(false)
+    expect(result.result).toBe(input)
+  })
+  it("handles stack trace compression", () => {
+    const input = `at async Promise.all (index 0)
+at Module._compile (/node_modules/jest/build/index.js:45:12)
+at async Promise.all (index 0)
+at Object.<anonymous> (/node_modules/jest/build/index.js:112:8)
+at async Promise.all (index 0)`
+    const result = compressLZW(input)
+    expect(result.compressed).toBe(true)
+    expect(decompressLZW(result.result)).toBe(input)
+  })
+  it("preserves content with minimal repetition", () => {
+    const input = "line1\nline2\nline3\nline4"
+    const result = compressLZW(input)
+    // Short lines don't meet minimum substring length
+    expect(result.compressed).toBe(false)
   })
 })
 
