@@ -65,18 +65,19 @@ function jaccardSimilarity(a: string, b: string): number {
   return union === 0 ? 0 : intersection / union
 }
 
-// Check if content is similar to any recent call
-function findSimilarEntry(state: DedupState, content: string, tool: string): DedupEntry | null {
+// Check if content is similar to any recent call — cross-tool aware
+// Identical content from different tools (e.g., bash cat vs read) is deduplicated
+function findSimilarEntry(state: DedupState, content: string, _tool: string): DedupEntry | null {
   const currentHash = hashContent(content)
 
   for (const entry of state.recentCalls) {
-    // Exact hash match
-    if (entry.hash === currentHash && entry.tool === tool) {
+    // Exact hash match — regardless of tool (cross-tool dedup)
+    if (entry.hash === currentHash) {
       return entry
     }
 
-    // Fuzzy similarity check (for slightly different outputs)
-    if (entry.tool === tool && content.length > 100 && entry.content.length > 100) {
+    // Fuzzy similarity check — regardless of tool
+    if (content.length > 100 && entry.content.length > 100) {
       const similarity = jaccardSimilarity(content, entry.content)
       if (similarity >= SIMILARITY_THRESHOLD) {
         return entry

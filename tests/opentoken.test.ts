@@ -120,6 +120,24 @@ describe("L12: Cross-Call Dedup", () => {
     const second = deduplicate(TEST_SESSION, output, "bash")
     expect(second.deduped).toBe(true)
   })
+  it("deduplicates identical output across different tools", () => {
+    resetDedup(TEST_SESSION)
+    const output = '{"name": "test", "version": "1.0.0"}'
+    const bash = deduplicate(TEST_SESSION, output, "bash")
+    expect(bash.deduped).toBe(false)
+    const read = deduplicate(TEST_SESSION, output, "read")
+    expect(read.deduped).toBe(true)
+    expect(read.result).toContain("bash")
+  })
+  it("deduplicates fuzzy matches across different tools", () => {
+    resetDedup(TEST_SESSION)
+    const output1 = "package.json contents with name version dependencies scripts and lots of detailed text here to exceed the 100 character minimum threshold for fuzzy matching"
+    const output2 = "package.json contents with name version dependencies scripts and lots of detailed text here to exceed the 100 character minimum threshold for fuzzy matching plus extra"
+    const bash = deduplicate(TEST_SESSION, output1, "bash")
+    expect(bash.deduped).toBe(false)
+    const read = deduplicate(TEST_SESSION, output2, "read")
+    expect(read.deduped).toBe(true)
+  })
 })
 
 describe("L14: Auto-Escalation", () => {
