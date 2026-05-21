@@ -10,7 +10,7 @@ const TEST_SESSION = "test-session"
 
 // Phase 1 imports
 import { preCallFilter, rewriteCommand, isMinifiedOrGenerated } from "../src/precall"
-import { postCallProcess, stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content } from "../src/postcall"
+import { postCallProcess, stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content, normalizeLogNoise, minimizeTableWhitespace, minifyJSON } from "../src/postcall"
 import { deduplicate, resetDedup } from "../src/dedup"
 import { progressiveDisclosure, cleanupOffloaded } from "../src/progressive"
 import { applyAutoEscalation, deescalate, updateContext, getCompressionLevel, resetEscalation } from "../src/autoescalate"
@@ -584,6 +584,80 @@ describe("Post-Call Process", () => {
     const input = "\0\0\0\0\0\0\0\0\0\0"
     const result = postCallProcess(input)
     expect(result).toContain("Binary")
+  })
+})
+
+describe("L29: Log Normalization", () => {
+  it("normalizes timestamps", () => {
+    const input = "[2026-05-21 15:53:32.412] Starting build"
+    const result = normalizeLogNoise(input)
+    expect(result).toBe("[TIMESTAMP] Starting build")
+  })
+  it("normalizes ISO timestamps", () => {
+    const input = "Error at 2026-05-21T15:53:32.412Z in module"
+    const result = normalizeLogNoise(input)
+    expect(result).toBe("Error at [TIMESTAMP] in module")
+  })
+  it("normalizes PIDs", () => {
+    const input = "PID 29482 started"
+    const result = normalizeLogNoise(input)
+    expect(result).toBe("[PID] started")
+  })
+  it("normalizes elapsed milliseconds", () => {
+    const input = "Test passed in 42ms"
+    const result = normalizeLogNoise(input)
+    expect(result).toBe("Test passed in [X]ms")
+  })
+  it("normalizes elapsed seconds", () => {
+    const input = "Build completed in 4.234s"
+    const result = normalizeLogNoise(input)
+    expect(result).toBe("Build completed in [X]s")
+  })
+  it("preserves non-log content", () => {
+    const input = "function hello() { return 'world' }"
+    const result = normalizeLogNoise(input)
+    expect(result).toBe(input)
+  })
+})
+
+describe("L30: Table Whitespace Minimization", () => {
+  it("minimizes table padding", () => {
+    const input = "|  id  |  name  |  status  |"
+    const result = minimizeTableWhitespace(input)
+    expect(result).toBe("|id|name|status|")
+  })
+  it("minimizes multi-line tables", () => {
+    const input = "|  id  |  name  |\n|  1   |  foo   |\n|  2   |  bar   |"
+    const result = minimizeTableWhitespace(input)
+    expect(result).toBe("|id|name|\n|1|foo|\n|2|bar|")
+  })
+  it("preserves non-table lines", () => {
+    const input = "Header\n|  id  |  name  |\nFooter"
+    const result = minimizeTableWhitespace(input)
+    expect(result).toBe("Header\n|id|name|\nFooter")
+  })
+})
+
+describe("L31: JSON Minification", () => {
+  it("minifies single JSON object", () => {
+    const input = '{ "name": "test", "version": "1.0.0" }'
+    const result = minifyJSON(input)
+    expect(result).toBe('{"name":"test","version":"1.0.0"}')
+  })
+  it("minifies JSON array", () => {
+    const input = '[ { "a": 1 }, { "b": 2 } ]'
+    const result = minifyJSON(input)
+    expect(result).toBe('[{"a":1},{"b":2}]')
+  })
+  it("preserves non-JSON content", () => {
+    const input = "Hello world, this is not JSON"
+    const result = minifyJSON(input)
+    expect(result).toBe(input)
+  })
+  it("minifies nested JSON objects", () => {
+    const input = '{ "outer": { "inner": { "value": 42 } } }'
+    const result = minifyJSON(input)
+    expect(result).toBe('{"outer":{"inner":{"value":42}}}')
   })
 })
 

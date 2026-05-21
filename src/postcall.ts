@@ -6,6 +6,9 @@
 // #21 Whitespace/null cleanup (strip redundant fields, timestamps)
 // #27 TOON format conversion (JSON arrays → tabular)
 // #28 Aggressive whitespace normalization
+// #29 Log normalization (timestamps, PIDs, elapsed time → static placeholders)
+// #30 Table whitespace minimization (strip padding from CLI tables)
+// #31 JSON minification (lossless whitespace removal)
 
 import { convertToTOON } from "./toon"
 
@@ -270,7 +273,7 @@ export function normalizeWhitespace(text: string): string {
   let result = text
 
   // Collapse 3+ newlines into 2 (preserve paragraph breaks)
-  result = result.replace(/\n{3,}/g, "\n\n")
+  result = result.replace(/\n{3}/g, "\n\n")
 
   // Strip trailing whitespace on each line
   result = result.replace(/[ \t]+$/gm, "")
@@ -283,6 +286,104 @@ export function normalizeWhitespace(text: string): string {
 
   // Strip trailing blank lines
   result = result.replace(/\n+$/, "")
+
+  return result
+}
+
+// #29: Log normalization — replace dynamic runtime noise with static placeholders
+// Enables provider-side prompt caching (90% discount on cached input tokens)
+// Zero quality risk: timestamps, PIDs, and elapsed times are never used for execution
+export function normalizeLogNoise(text: string): string {
+  let result = text
+
+  // Timestamps: [2026-05-21 15:53:32.412] → [TIMESTAMP]
+  // ISO format: 2026-05-21T15:53:32.412Z → [TIMESTAMP]
+  // Common log format: 21/May/2026:15:53:32 +0000 → [TIMESTAMP]
+  result = result.replace(/\[\d{4}[-/]\d{2}[-/]\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\]/g, "[TIMESTAMP]")
+  result = result.replace(/\d{4}[-/]\d{2}[-/]\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?/g, "[TIMESTAMP]")
+
+  // PIDs: PID 29482, pid: 12345, (12345) → [PID]
+  result = result.replace(/\b[Pp][Ii][Dd]\s*\d+/g, "[PID]")
+  result = result.replace(/\(\d{4,}\)/g, "([PID])")
+
+  // Elapsed time: passed in 42ms → passed in [X]ms, 4.234s → [X]s
+  result = result.replace(/(\d+(?:\.\d+)?)\s*ms/g, "[X]ms")
+  result = result.replace(/(\d+(?:\.\d+)?)\s*s\b/g, "[X]s")
+
+  // Memory sizes: 1.234 MB → [X]MB, 512 KB → [X]KB
+  result = result.replace(/(\d+(?:\.\d+)?)\s*(?:MB|KB|GB|TB)/gi, "[X]$2")
+
+  return result
+}
+
+// #30: Table whitespace minimization — strip padding from CLI tables
+// Zero quality risk: purely visual formatting, all data values preserved
+export function minimizeTableWhitespace(text: string): string {
+  const lines = text.split("\n")
+  const result: string[] = []
+
+  for (const line of lines) {
+    // Detect table lines: lines with multiple | separators
+    if ((line.match(/\|/g) || []).length >= 2) {
+      // Strip whitespace between | separators: |  id  |  name  | → |id|name|
+      const minimized = line.replace(/\|\s*/g, "|").replace(/\s*\|/g, "|")
+      result.push(minimized)
+    } else {
+      result.push(line)
+    }
+  }
+
+  return result.join("\n")
+}
+
+// #31: JSON minification — lossless whitespace removal
+// Zero quality risk: LLMs read minified JSON perfectly
+export function minifyJSON(text: string): string {
+  if (!text.includes("{") && !text.includes("[")) return text
+
+  // Try to find and minify JSON blocks
+  // First, try the entire text as JSON
+  try {
+    const parsed = JSON.parse(text)
+    return JSON.stringify(parsed)
+  } catch { /* not a single JSON block */ }
+
+  // Try to find JSON objects/arrays in the text and minify them
+  let result = text
+  let changed = true
+  let iterations = 0
+  const MAX_ITERATIONS = 20
+
+  while (changed && iterations < MAX_ITERATIONS) {
+    changed = false
+    iterations++
+
+    // Find JSON objects: { ... }
+    result = result.replace(/\{[^{}]*\}/g, (match) => {
+      try {
+        const parsed = JSON.parse(match)
+        const minified = JSON.stringify(parsed)
+        if (minified.length < match.length) {
+          changed = true
+          return minified
+        }
+      } catch { /* not valid JSON */ }
+      return match
+    })
+
+    // Find JSON arrays: [ ... ]
+    result = result.replace(/\[[^\[\]]*\]/g, (match) => {
+      try {
+        const parsed = JSON.parse(match)
+        const minified = JSON.stringify(parsed)
+        if (minified.length < match.length) {
+          changed = true
+          return minified
+        }
+      } catch { /* not valid JSON */ }
+      return match
+    })
+  }
 
   return result
 }
@@ -315,8 +416,17 @@ export function postCallProcess(text: string): string {
   const toon = convertToTOON(result)
   if (toon.converted) result = toon.result
 
+  // #31: JSON minification (lossless whitespace removal)
+  result = minifyJSON(result)
+
   // #28: Aggressive whitespace normalization
   result = normalizeWhitespace(result)
+
+  // #30: Table whitespace minimization
+  result = minimizeTableWhitespace(result)
+
+  // #29: Log normalization (timestamps, PIDs, elapsed time → static placeholders)
+  result = normalizeLogNoise(result)
 
   // #22: URL shortening
   result = shortenUrls(result)

@@ -9,7 +9,7 @@ import fs from "fs"
 
 // Phase 1 imports
 import { preCallFilter } from "./precall"
-import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content, normalizeWhitespace } from "./postcall"
+import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content, normalizeWhitespace, normalizeLogNoise, minimizeTableWhitespace, minifyJSON } from "./postcall"
 import { convertToTOON } from "./toon"
 import { compressLTSC } from "./ltsc"
 import { deduplicate, resetDedup } from "./dedup"
@@ -283,6 +283,15 @@ async function applyBashFilter(sessionID: string, command: string, output: strin
   // Aggressive whitespace normalization
   output = safeStage("normalizeWhitespace", () => normalizeWhitespace(output), output)
 
+  // JSON minification (lossless whitespace removal)
+  output = safeStage("minifyJSON", () => minifyJSON(output), output)
+
+  // Table whitespace minimization (strip padding from CLI tables)
+  output = safeStage("minimizeTableWhitespace", () => minimizeTableWhitespace(output), output)
+
+  // Log normalization (timestamps, PIDs, elapsed time → static placeholders)
+  output = safeStage("normalizeLogNoise", () => normalizeLogNoise(output), output)
+
   const { pipeline } = routeContent(output)
 
   if (pipeline.includes("diff-fold") || pipeline.includes("log-fold")) {
@@ -378,6 +387,15 @@ async function applyReadFilter(sessionID: string, filePath: string, content: str
   // Aggressive whitespace normalization
   content = safeStage("normalizeWhitespace", () => normalizeWhitespace(content), content)
 
+  // JSON minification (lossless whitespace removal)
+  content = safeStage("minifyJSON", () => minifyJSON(content), content)
+
+  // Table whitespace minimization (strip padding from CLI tables)
+  content = safeStage("minimizeTableWhitespace", () => minimizeTableWhitespace(content), content)
+
+  // Log normalization (timestamps, PIDs, elapsed time → static placeholders)
+  content = safeStage("normalizeLogNoise", () => normalizeLogNoise(content), content)
+
   const { pipeline } = routeContent(content, filePath)
 
   if (pipeline.includes("skeleton") && content.split("\n").length > 50) {
@@ -433,6 +451,15 @@ async function applyGrepFilter(sessionID: string, output: string): Promise<strin
   // Aggressive whitespace normalization
   output = safeStage("normalizeWhitespace", () => normalizeWhitespace(output), output)
 
+  // JSON minification (lossless whitespace removal)
+  output = safeStage("minifyJSON", () => minifyJSON(output), output)
+
+  // Table whitespace minimization (strip padding from CLI tables)
+  output = safeStage("minimizeTableWhitespace", () => minimizeTableWhitespace(output), output)
+
+  // Log normalization (timestamps, PIDs, elapsed time → static placeholders)
+  output = safeStage("normalizeLogNoise", () => normalizeLogNoise(output), output)
+
   let filtered = safeStage("filterGrep", () => filterGrep(output), output)
 
   const disclosed = await safeStageAsync("progressiveDisclosure", () => progressiveDisclosure(sessionID, filtered, "grep"), null)
@@ -463,6 +490,15 @@ async function applyGlobFilter(sessionID: string, output: string): Promise<strin
   output = safeStage("stripThinkingBlocks", () => stripThinkingBlocks(output), output)
 
   if (shouldSkipFilter(output)) return output
+
+  // JSON minification (lossless whitespace removal)
+  output = safeStage("minifyJSON", () => minifyJSON(output), output)
+
+  // Table whitespace minimization (strip padding from CLI tables)
+  output = safeStage("minimizeTableWhitespace", () => minimizeTableWhitespace(output), output)
+
+  // Log normalization (timestamps, PIDs, elapsed time → static placeholders)
+  output = safeStage("normalizeLogNoise", () => normalizeLogNoise(output), output)
 
   let filtered = safeStage("filterGlob", () => filterGlob(output), output)
 
