@@ -102,7 +102,19 @@ function StatusBarWidget(props: { theme: TuiTheme }) {
     setDisplay(`🌸 opentoken ready  ${duration}  ${time}`)
   }
 
+  onMount(() => {
+    loadMetrics()
+    metricsInterval = setInterval(loadMetrics, 1000)
+  })
 
+  onCleanup(() => {
+    clearInterval(metricsInterval)
+  })
+
+  return (
+    <text fg={props.theme.current.text}>{display()}</text>
+  )
+}
 
 const plugin: TuiPlugin = async (api, _options, _meta) => {
   api.slots.register({
