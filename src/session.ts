@@ -47,6 +47,7 @@ export async function saveSessionSummary(summary: Partial<SessionSummary>): Prom
     const tempFile = `${SESSION_FILE}.tmp`
     await Bun.write(tempFile, JSON.stringify(newSummary, null, 2))
     fs.renameSync(tempFile, SESSION_FILE)
+    fs.chmodSync(SESSION_FILE, 0o600)
   } catch {
     // Silent fail
   }
@@ -172,6 +173,7 @@ export async function writeSessionState(sessionID: string, project?: string, com
     const tempFile = `${SESSION_FILE}.tmp`
     await Bun.write(tempFile, JSON.stringify(summary, null, 2))
     fs.renameSync(tempFile, SESSION_FILE)
+    fs.chmodSync(SESSION_FILE, 0o600)
   } catch {
     // Silent fail
   }

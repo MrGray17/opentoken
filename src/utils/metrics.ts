@@ -24,6 +24,7 @@ function ensureDir(): void {
   try {
     if (!fs.existsSync(METRICS_DIR)) {
       fs.mkdirSync(METRICS_DIR, { recursive: true })
+      fs.chmodSync(METRICS_DIR, 0o700)
     }
   } catch {
     // Homedir inaccessible — metrics will silently fail
@@ -48,6 +49,7 @@ function rotateIfNeeded(): void {
     }
 
     fs.renameSync(METRICS_FILE, `${METRICS_FILE}.1`)
+    fs.chmodSync(`${METRICS_FILE}.1`, 0o600)
   } catch {
     // Rotation failed — continue appending (metrics shouldn't break pipeline)
   }
@@ -59,6 +61,7 @@ export function recordMetric(entry: MetricEntry): void {
     rotateIfNeeded()
     const line = JSON.stringify(entry) + "\n"
     fs.appendFileSync(METRICS_FILE, line)
+    fs.chmodSync(METRICS_FILE, 0o600)
   } catch {
     // Silent fail — metrics shouldn't break the pipeline
   }

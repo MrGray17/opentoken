@@ -173,6 +173,12 @@ Install a specific version:
 OPENTOKEN_VERSION=1.1.0 curl -fsSL https://raw.githubusercontent.com/MrGray17/opentoken/refs/heads/main/install.sh | bash
 ```
 
+Verify checksum:
+
+```bash
+bash install.sh --sha256 <expected-sha256>
+```
+
 Or manually:
 
 ```bash
@@ -248,6 +254,9 @@ OpenToken is designed with defense-in-depth:
 - **Output size limits** — Prevents memory exhaustion from oversized tool outputs
 - **Graceful degradation** — Every pipeline stage is wrapped in error handling; a single failure never crashes the session
 - **Secret redaction** — Runs first in every pipeline, before any other processing (18 patterns compiled into a single alternation regex for performance)
+- **SHA256 checksum verification** — install.sh downloads to a temp tarball, computes SHA256, and supports `--sha256 <hash>` for automatic integrity verification
+- **File permission hardening** — Session state, metrics, and error files are created with `0o600` (owner-only read/write); config directories use `0o700`
+- **Pinned dependencies** — All package versions are pinned to exact versions — no range-based auto-updates that could introduce supply chain changes
 
 ## License
 

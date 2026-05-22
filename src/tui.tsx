@@ -6,6 +6,7 @@ import path from "path"
 import os from "os"
 
 const METRICS_DIR = path.join(os.homedir(), ".config", "opentoken")
+const CONFIG_FILE = path.join(METRICS_DIR, "config.json")
 const SESSION_FILE = path.join(METRICS_DIR, "session-memory.json")
 const SESSION_START_FILE = path.join(METRICS_DIR, "session-start.json")
 
@@ -37,13 +38,29 @@ function levelEmoji(level: string): string {
   }
 }
 
+async function isTuiEnabled(): Promise<boolean> {
+  try {
+    const file = Bun.file(CONFIG_FILE)
+    if (await file.exists()) {
+      const cfg = JSON.parse(await file.text())
+      if (cfg.enableTui === false) return false
+    }
+  } catch { /* ignore */ }
+  return true
+}
+
 function StatusBarWidget(props: { theme: TuiTheme }) {
   const [display, setDisplay] = createSignal("")
   let sessionStart = Date.now()
-
   let metricsInterval: ReturnType<typeof setInterval>
 
   async function loadMetrics() {
+    const enabled = await isTuiEnabled()
+    if (!enabled) {
+      setDisplay("")
+      return
+    }
+
     // Detect session start from session-start.json to track duration
     try {
       const startFile = Bun.file(SESSION_START_FILE)
@@ -62,12 +79,19 @@ function StatusBarWidget(props: { theme: TuiTheme }) {
       if (await sessionFile.exists()) {
         const data = JSON.parse(await sessionFile.text())
         const tokensSaved = data.tokensSaved ?? 0
-        const toolCalls = data.toolCalls ?? 0
         const compressionLevel = data.compressionLevel ?? "off"
         const emoji = levelEmoji(compressionLevel)
 
+        // Staleness check: if file timestamp is older than session start,
+        // the data is from a previous session — don't display it
+        const fileTs = data.timestamp
+        if (fileTs && sessionStart && fileTs < sessionStart) {
+          setDisplay(`🌸 opentoken ready  ${duration}  ${time}`)
+          return
+        }
+
         if (tokensSaved > 0) {
-          setDisplay(`🌸 opentoken saved ${formatTokens(tokensSaved)} tokens  ${duration}  ${time}`)
+          setDisplay(`${emoji} opentoken saved ${formatTokens(tokensSaved)} tokens  ${duration}  ${time}`)
         } else {
           setDisplay(`🌸 opentoken ready  ${duration}  ${time}`)
         }
@@ -78,19 +102,7 @@ function StatusBarWidget(props: { theme: TuiTheme }) {
     setDisplay(`🌸 opentoken ready  ${duration}  ${time}`)
   }
 
-  onMount(() => {
-    loadMetrics()
-    metricsInterval = setInterval(loadMetrics, 1000)
-  })
 
-  onCleanup(() => {
-    clearInterval(metricsInterval)
-  })
-
-  return (
-    <text fg={props.theme.current.text}>{display()}</text>
-  )
-}
 
 const plugin: TuiPlugin = async (api, _options, _meta) => {
   api.slots.register({

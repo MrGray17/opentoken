@@ -72,6 +72,7 @@ interface OpenTokenConfig {
   enableHistoryCompression: boolean // Kill switch for experimental hooks (default false)
   historyCompressionWindow: number  // Messages to keep full-fidelity (default 12)
   enableSessionMemory: boolean      // Cross-session memory persistence (default false)
+  enableTui: boolean                 // TUI status bar (default true)
 }
 
 const DEFAULT_CONFIG: OpenTokenConfig = {
@@ -84,6 +85,7 @@ const DEFAULT_CONFIG: OpenTokenConfig = {
   enableHistoryCompression: false,    // Kill switch — opt-in for experimental hooks
   historyCompressionWindow: 12,       // Keep last 12 messages full-fidelity
   enableSessionMemory: false,         // Cross-session memory persistence
+  enableTui: true,                    // TUI status bar
 }
 
 let config: OpenTokenConfig = DEFAULT_CONFIG

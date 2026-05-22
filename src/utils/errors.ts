@@ -23,6 +23,7 @@ function ensureDir(): void {
   try {
     if (!fs.existsSync(ERROR_DIR)) {
       fs.mkdirSync(ERROR_DIR, { recursive: true })
+      fs.chmodSync(ERROR_DIR, 0o700)
     }
   } catch {
     // Homedir inaccessible — errors will silently fail
@@ -45,6 +46,7 @@ function rotateIfNeeded(): void {
     }
 
     fs.renameSync(ERROR_FILE, `${ERROR_FILE}.1`)
+    fs.chmodSync(`${ERROR_FILE}.1`, 0o600)
   } catch {
     // Rotation failed — continue appending
   }
@@ -56,6 +58,7 @@ export function logError(entry: ErrorEntry): void {
     rotateIfNeeded()
     const line = JSON.stringify(entry) + "\n"
     fs.appendFileSync(ERROR_FILE, line)
+    fs.chmodSync(ERROR_FILE, 0o600)
   } catch {
     // Silent fail — error logging shouldn't break the pipeline
   }
