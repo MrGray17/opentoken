@@ -156,3 +156,51 @@ async function ensureDir(): Promise<void> {
     // Ignore
   }
 }
+
+// Semantic abbreviation — replace long repeated identifiers with $N$ markers
+// 0-risk: legend appended to output so LLM can resolve abbreviations
+const MIN_IDENTIFIER_LENGTH = 40
+
+export function abbreviateIdentifiers(sessionID: string, text: string): string {
+  const state = getState(sessionID)
+
+  // Find all potential identifiers (word chars, dots, slashes, hyphens — 40+ chars)
+  const identPattern = /[A-Za-z_/.][A-Za-z0-9_/.\-]{39,}(?<![.\-/])/g
+  const matches = text.match(identPattern)
+  if (!matches || matches.length < 2) return text
+
+  // Count frequency
+  const freq = new Map<string, number>()
+  for (const m of matches) {
+    freq.set(m, (freq.get(m) || 0) + 1)
+  }
+
+  // Filter to those appearing 2+ times, sort by frequency descending
+  const candidates = [...freq.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1])
+  if (candidates.length === 0) return text
+
+  // Calculate savings: original chars vs abbreviation chars + legend
+  const totalOriginalChars = candidates.reduce((sum, [id, count]) => sum + id.length * count, 0)
+  const totalAbbrevChars = candidates.reduce((sum, [, count]) => sum + 3 * count, 0) // $1$ = 3 chars
+  const legendLength = candidates.reduce((sum, [id, i]) => sum + 3 + 3 + id.length + 2, 0) // "$1$ = id\n"
+  const savings = totalOriginalChars - totalAbbrevChars - legendLength
+  if (savings <= 0) return text
+
+  // Build replacement map
+  let result = text
+  for (let i = 0; i < candidates.length; i++) {
+    const [id] = candidates[i]
+    const marker = `\$${i + 1}\$`
+    // Escape special regex chars in the identifier
+    const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    result = result.replace(new RegExp(escaped, "g"), marker)
+  }
+
+  // Append legend
+  const legend = candidates.map(([id, count], i) => `\$${i + 1}\$ = ${id} (${count}x)`).join("\n")
+  result += `\n\n# Abbreviations:\n${legend}`
+
+  return result
+}

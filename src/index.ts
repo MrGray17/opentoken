@@ -9,7 +9,7 @@ import fs from "fs"
 
 // Phase 1 imports
 import { preCallFilter } from "./precall"
-import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content, normalizeWhitespace, normalizeLogNoise, minimizeTableWhitespace, minifyJSON, stripAnsi } from "./postcall"
+import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content, normalizeWhitespace, normalizeLogNoise, minimizeTableWhitespace, minifyJSON, stripAnsi, foldRepeatedLines } from "./postcall"
 import { convertToTOON } from "./toon"
 import { compressLTSC } from "./ltsc"
 import { compressLZW } from "./lzw"
@@ -52,7 +52,7 @@ import { getErrorSummary, logError } from "./utils/errors"
 import { extractSkeleton } from "./skeleton"
 import { foldDiffAndLogs } from "./folding"
 import { sampleJson } from "./jsonsample"
-import { applyReversibleCompression, cleanupRewind } from "./rewind"
+import { applyReversibleCompression, cleanupRewind, abbreviateIdentifiers } from "./rewind"
 import { analyzeContent, getCompressionPipeline } from "./router"
 import { indexDirectory, loadIndex } from "./symbolindex"
 import { shouldBlockGrep, shouldBlockGlob, shouldBlockShellGrep, trackLSPUsage, resetLSPState } from "./lspfirst"
@@ -296,6 +296,9 @@ async function applyBashFilter(sessionID: string, command: string, output: strin
   // Aggressive whitespace normalization
   output = safeStage("normalizeWhitespace", () => normalizeWhitespace(output), output)
 
+  // Line-level repetition folding — collapse consecutive identical lines
+  output = safeStage("foldRepeatedLines", () => foldRepeatedLines(output), output)
+
   // JSON minification (lossless whitespace removal)
   output = safeStage("minifyJSON", () => minifyJSON(output), output)
 
@@ -343,9 +346,17 @@ async function applyBashFilter(sessionID: string, command: string, output: strin
         const catReadMatch = command.match(/^\s*cat\s+(?!-)([^\s|&;>'<*"]+)\s*$/)
         if (catReadMatch) {
           const catPath = catReadMatch[1]
+          // Cross-tool dedup: if read tool already showed this file, point to it
+          const cachedRead = getCachedRead(sessionID, catPath)
+          if (cachedRead !== null) {
+            filtered = `[Contents of ${catPath} already shown via read — see earlier result]`
+            break
+          }
           const ext = "." + (catPath.split(".").pop()?.toLowerCase() || "")
           if (SOURCE_EXTENSIONS.includes(ext)) {
             filtered = safeStage("filterRead", () => filterRead(catPath, output), output)
+            // Cache the skeleton for future cat/read dedup
+            setCachedRead(sessionID, catPath, filtered)
             break
           }
         }
@@ -378,6 +389,9 @@ async function applyBashFilter(sessionID: string, command: string, output: strin
   }
 
   filtered = safeStage("applyAutoEscalation", () => applyAutoEscalation(filtered), filtered)
+
+  // Semantic abbreviation — replace long repeated identifiers with $N$ markers
+  filtered = safeStage("abbreviateIdentifiers", () => abbreviateIdentifiers(sessionID, filtered), filtered)
 
   // LTSC: Lossless Token Sequence Compression (LZ77-style, 18-27% savings)
   const ltsc = safeStage("compressLTSC", () => compressLTSC(filtered), { compressed: false, result: filtered, savings: 0 })
@@ -431,6 +445,9 @@ async function applyReadFilter(sessionID: string, filePath: string, content: str
   // Aggressive whitespace normalization
   content = safeStage("normalizeWhitespace", () => normalizeWhitespace(content), content)
 
+  // Line-level repetition folding — collapse consecutive identical lines
+  content = safeStage("foldRepeatedLines", () => foldRepeatedLines(content), content)
+
   // JSON minification (lossless whitespace removal)
   content = safeStage("minifyJSON", () => minifyJSON(content), content)
 
@@ -466,6 +483,9 @@ async function applyReadFilter(sessionID: string, filePath: string, content: str
 
   filtered = safeStage("applyAutoEscalation", () => applyAutoEscalation(filtered), filtered)
 
+  // Semantic abbreviation — replace long repeated identifiers with $N$ markers
+  filtered = safeStage("abbreviateIdentifiers", () => abbreviateIdentifiers(sessionID, filtered), filtered)
+
   // LTSC: Lossless Token Sequence Compression (LZ77-style, 18-27% savings)
   const ltsc = safeStage("compressLTSC", () => compressLTSC(filtered), { compressed: false, result: filtered, savings: 0 })
   if (ltsc.compressed) filtered = ltsc.result
@@ -499,6 +519,9 @@ async function applyGrepFilter(sessionID: string, output: string): Promise<strin
   // Aggressive whitespace normalization
   output = safeStage("normalizeWhitespace", () => normalizeWhitespace(output), output)
 
+  // Line-level repetition folding — collapse consecutive identical lines
+  output = safeStage("foldRepeatedLines", () => foldRepeatedLines(output), output)
+
   // JSON minification (lossless whitespace removal)
   output = safeStage("minifyJSON", () => minifyJSON(output), output)
 
@@ -519,6 +542,9 @@ async function applyGrepFilter(sessionID: string, output: string): Promise<strin
   }
 
   filtered = safeStage("applyAutoEscalation", () => applyAutoEscalation(filtered), filtered)
+
+  // Semantic abbreviation — replace long repeated identifiers with $N$ markers
+  filtered = safeStage("abbreviateIdentifiers", () => abbreviateIdentifiers(sessionID, filtered), filtered)
 
   // LTSC: Lossless Token Sequence Compression (LZ77-style, 18-27% savings)
   const ltsc = safeStage("compressLTSC", () => compressLTSC(filtered), { compressed: false, result: filtered, savings: 0 })
@@ -543,6 +569,9 @@ async function applyGlobFilter(sessionID: string, output: string): Promise<strin
 
   if (shouldSkipFilter(output)) return output
 
+  // Line-level repetition folding — collapse consecutive identical lines
+  output = safeStage("foldRepeatedLines", () => foldRepeatedLines(output), output)
+
   // JSON minification (lossless whitespace removal)
   output = safeStage("minifyJSON", () => minifyJSON(output), output)
 
@@ -563,6 +592,9 @@ async function applyGlobFilter(sessionID: string, output: string): Promise<strin
   }
 
   filtered = safeStage("applyAutoEscalation", () => applyAutoEscalation(filtered), filtered)
+
+  // Semantic abbreviation — replace long repeated identifiers with $N$ markers
+  filtered = safeStage("abbreviateIdentifiers", () => abbreviateIdentifiers(sessionID, filtered), filtered)
 
   // LTSC: Lossless Token Sequence Compression (LZ77-style, 18-27% savings)
   const ltsc = safeStage("compressLTSC", () => compressLTSC(filtered), { compressed: false, result: filtered, savings: 0 })

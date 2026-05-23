@@ -103,13 +103,68 @@ export function filterTree(output: string): string {
 }
 
 export function filterFsOutput(command: string, output: string): string {
-  if (command.startsWith("ls") || command.includes(" ls ")) return filterLs(output)
-  if (command.startsWith("find") || command.includes(" find ")) return filterFind(output)
-  if (command.startsWith("tree") || command.includes(" tree ")) return filterTree(output)
-
-  // Default: truncate
-  if (output.length > 10000) {
-    return output.slice(0, 5000) + "\n... (truncated)"
+  let result = output
+  if (command.startsWith("ls") || command.includes(" ls ")) result = filterLs(output)
+  else if (command.startsWith("find") || command.includes(" find ")) result = filterFind(output)
+  else if (command.startsWith("tree") || command.includes(" tree ")) result = filterTree(output)
+  else if (output.length > 10000) {
+    result = output.slice(0, 5000) + "\n... (truncated)"
   }
-  return output
+
+  return compressPaths(result)
+}
+
+// Path prefix compression — collapse shared directory prefixes
+// 0-risk: fully reconstructable from prefix + suffix list
+export function compressPaths(output: string): string {
+  const lines = output.split("\n")
+  if (lines.length < 3) return output
+
+  // Collect path-like lines (contain /, not noise dirs)
+  const pathLines: { index: number; path: string }[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (line.includes("/") && !NOISE_DIRS.some(d => line.includes(d))) {
+      pathLines.push({ index: i, path: line })
+    }
+  }
+  if (pathLines.length < 3) return output
+
+  // Find longest common prefix among path lines
+  const paths = pathLines.map(p => p.path)
+  let prefix = paths[0]
+  for (let i = 1; i < paths.length; i++) {
+    let j = 0
+    while (j < prefix.length && j < paths[i].length && prefix[j] === paths[i][j]) j++
+    prefix = prefix.slice(0, j)
+    if (!prefix) break
+  }
+  // Trim to last / for a clean directory prefix
+  const lastSlash = prefix.lastIndexOf("/")
+  if (lastSlash <= 0) return output
+  prefix = prefix.slice(0, lastSlash + 1)
+
+  // Build suffix list
+  const suffixes = paths.map(p => p.slice(prefix.length))
+  if (suffixes.length < 3) return output
+
+  // Check savings >= 30%
+  const originalLen = suffixes.reduce((s, sfx) => s + prefix.length + sfx.length, 0)
+  const compressedLen = prefix.length + 2 + suffixes.join(", ").length + 2 // "prefix/ [s1, s2, ...]"
+  if (compressedLen >= originalLen * 0.7) return output
+
+  // Replace path lines with compressed format, keep non-path lines intact
+  const result: string[] = []
+  let pathIdx = 0
+  for (let i = 0; i < lines.length; i++) {
+    if (pathIdx < pathLines.length && i === pathLines[pathIdx].index) {
+      if (pathIdx === 0) {
+        result.push(`${prefix}[${suffixes.join(", ")}]`)
+      }
+      pathIdx++
+    } else {
+      result.push(lines[i])
+    }
+  }
+  return result.join("\n")
 }

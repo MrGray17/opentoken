@@ -395,3 +395,52 @@ export function minifyJSON(text: string): string {
   return result
 }
 
+// Line-level repetition folding — collapse consecutive identical lines
+// 0-risk: count preserved, pattern unambiguous, reversible from context
+export function foldRepeatedLines(text: string): string {
+  const lines = text.split("\n")
+  if (lines.length < 3) return text
+
+  const result: string[] = []
+  let i = 0
+
+  while (i < lines.length) {
+    // Check for alternating 2-line pattern ABAB (4+ lines)
+    if (i + 3 < lines.length &&
+        lines[i] === lines[i + 2] &&
+        lines[i + 1] === lines[i + 3] &&
+        lines[i] !== lines[i + 1]) {
+      const a = lines[i]
+      const b = lines[i + 1]
+      let count = 2
+      let j = i + 4
+      while (j + 1 < lines.length && lines[j] === a && lines[j + 1] === b) {
+        count++
+        j += 2
+      }
+      result.push(`${count}× [${a}, ${b}]`)
+      i = j
+      continue
+    }
+
+    // Check for run of identical lines (2+)
+    if (i + 1 < lines.length && lines[i] === lines[i + 1]) {
+      const line = lines[i]
+      let count = 2
+      let j = i + 2
+      while (j < lines.length && lines[j] === line) {
+        count++
+        j++
+      }
+      result.push(`${count}× ${line}`)
+      i = j
+      continue
+    }
+
+    result.push(lines[i])
+    i++
+  }
+
+  return result.join("\n")
+}
+
