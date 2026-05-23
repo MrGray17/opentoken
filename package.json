@@ -41,7 +41,10 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "checks:regex": "bun run scripts/check-regex-safety.ts"
+    "checks:regex": "bun run scripts/check-regex-safety.ts",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --apply src/",
+    "format": "biome format --write src/"
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.15.5",
@@ -50,6 +53,7 @@
     "solid-js": "^1.9.13"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
     "@types/bun": "^1.3.14",
     "typescript": "^5.9.3"
   }

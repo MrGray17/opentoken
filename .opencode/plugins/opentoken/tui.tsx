@@ -1,218 +1,210 @@
 /** @jsxImportSource @opentui/solid */
 /** @jsxRuntime automatic */
-import type { TuiPlugin, TuiSlotContext, TuiTheme } from "@opencode-ai/plugin/tui"
-import type { Event } from "@opencode-ai/sdk/v2"
-import { createSignal, onCleanup, onMount } from "solid-js"
-import path from "path"
-import os from "os"
 
-const METRICS_DIR = path.join(os.homedir(), ".config", "opentoken")
-const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl")
-const SESSION_START_FILE = path.join(METRICS_DIR, "session-start.json")
+import os from "node:os";
+import path from "node:path";
+import type {
+	TuiPlugin,
+	TuiSlotContext,
+	TuiTheme,
+} from "@opencode-ai/plugin/tui";
+import { createSignal, onCleanup, onMount } from "solid-js";
+
+const METRICS_DIR = path.join(os.homedir(), ".config", "opentoken");
+const CONFIG_FILE = path.join(METRICS_DIR, "config.json");
+const SESSION_START_FILE = path.join(METRICS_DIR, "session-start.json");
+const STATS_SUMMARY_FILE = path.join(METRICS_DIR, "stats-summary.json");
 
 function formatTokens(n: number): string {
-  if (n < 1000) return `${n}`
-  if (n < 1000000) return `${(n / 1000).toFixed(1)}K`
-  return `${(n / 1000000).toFixed(1)}M`
+	if (n < 1000) return `${n}`;
+	if (n < 1000000) return `${(n / 1000).toFixed(1)}K`;
+	return `${(n / 1000000).toFixed(1)}M`;
 }
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+	return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function formatDuration(ms: number): string {
-  const seconds = Math.floor(ms / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const hours = Math.floor(minutes / 60)
-  if (hours > 0) return `${hours}h ${minutes % 60}m`
-  if (minutes > 0) return `${minutes}m ${seconds % 60}s`
-  return `${seconds}s`
+	const seconds = Math.floor(ms / 1000);
+	const minute = Math.floor(seconds / 60);
+	const hour = Math.floor(minute / 60);
+	if (hour > 0) return `${hour}h ${minute % 60}m`;
+	if (minute > 0) return `${minute}m ${seconds % 60}s`;
+	return `${seconds}s`;
 }
 
-interface StatusBarState {
-  tokensSaved: number
-  toolCalls: number
-  compressionLevel: string
-  sessionStart: number | null
-  isStreaming: boolean
+function getTerminalWidth(): number {
+	return typeof process !== "undefined" && process.stdout
+		? process.stdout.columns || 100
+		: 100;
 }
 
-// Cache sessionID on first poll — never re-read (avoids cross-terminal contamination)
-let sessionID: string | undefined
-let sessionCached = false
-
-// Read metrics.jsonl directly — always fresh, updated after every tool call
-async function readSessionMetrics(): Promise<{tokensSaved: number; toolCalls: number } | null> {
-  try {
-    // Cache session-start.json on first poll — never re-read
-    if (!sessionCached) {
-      try {
-        const startFile = Bun.file(SESSION_START_FILE)
-        if (await startFile.exists()) {
-          const data = JSON.parse(await startFile.text())
-          sessionID = data.sessionID
-          sessionCached = true
-        }
-      } catch { /* ignore */ }
-    }
-
-    const file = Bun.file(METRICS_FILE)
-    if (!(await file.exists())) return null
-    const text = await file.text()
-    const lines = text.trim().split("\n").filter((l) => l.trim())
-    let totalSaved = 0
-    let totalCalls = 0
-    for (const line of lines) {
-      try {
-        const entry = JSON.parse(line)
-        // Filter by sessionID when available (new entries have sessionID field)
-        if (sessionCached && sessionID) {
-          if (entry.sessionID && entry.sessionID !== sessionID) continue
-        }
-        totalSaved += (entry.before_tokens||0) - (entry.after_tokens||0)
-        totalCalls++
-      } catch { /* skip */ }
-    }
-    return { tokensSaved: Math.max(0, totalSaved), toolCalls: totalCalls }
-  } catch {
-    return null
-  }
-}
-    } catch { /* ignore */ }
-
-    const file = Bun.file(METRICS_FILE)
-    if (!(await file.exists())) return null
-    const text = await file.text()
-    const lines = text.trim().split("\n").filter((l) => l.trim())
-    let totalSaved = 0
-    let totalCalls = 0
-    for (const line of lines) {
-      try {
-        const entry = JSON.parse(line)
-        if (sessionStart > 0 && entry.ts) {
-          const entryTime = new Date(entry.ts).getTime()
-          if (entryTime < sessionStart) continue
-        }
-        totalSaved += (entry.before_tokens || 0) - (entry.after_tokens || 0)
-        totalCalls++
-      } catch { /* skip */ }
-    }
-    return { tokensSaved: Math.max(0, totalSaved), toolCalls: totalCalls }
-  } catch {
-    return null
-  }
+interface TuiConfig {
+	enabled: boolean;
+	useEmoji: boolean;
 }
 
+async function loadTuiConfig(): Promise<TuiConfig> {
+	const defaults: TuiConfig = { enabled: true, useEmoji: true };
+	try {
+		const f = Bun.file(CONFIG_FILE);
+		if (await f.exists()) {
+			const cfg = JSON.parse(await f.text());
+			if (cfg.enableTui === false) defaults.enabled = false;
+			if (cfg.tuiUseEmoji === false) defaults.useEmoji = false;
+		}
+	} catch {
+		/* ignore */
+	}
+	return defaults;
+}
 
-function StatusBarWidget(props: { theme: TuiTheme; getMetrics: () => { isStreaming: boolean; isComplete: boolean } | null; api?: any }) {
-  const [time, setTime] = createSignal(formatTime(new Date()))
-  const [state, setState] = createSignal<StatusBarState>({
-    tokensSaved: 0,
-    toolCalls: 0,
-    compressionLevel: "off",
-    sessionStart: null,
-    isStreaming: false,
-  })
+function StatusBarWidget(props: { theme: TuiTheme }) {
+	const [display, setDisplay] = createSignal("");
+	let sessionStart = Date.now();
+	let sessionID: string | undefined;
+	let sessionCached = false;
+	let useEmoji = true;
+	let metricsInterval: ReturnType<typeof setInterval>;
 
-  let clockInterval: ReturnType<typeof setInterval>
-  let metricsInterval: ReturnType<typeof setInterval>
+	async function loadMetrics() {
+		const cfg = await loadTuiConfig();
+		if (!cfg.enabled) {
+			setDisplay("");
+			return;
+		}
+		useEmoji = cfg.useEmoji;
 
-  async function loadMetrics() {
-    const metrics = await readSessionMetrics()
+		const width = getTerminalWidth();
+		const isNarrow = width < 60;
+		const isWide = width >= 100;
 
-    setState((prev) => ({
-      ...prev,
-      tokensSaved: metrics?.tokensSaved ?? prev.tokensSaved,
-      toolCalls: metrics?.toolCalls ?? prev.toolCalls,
-    }))
-  }
+		// Cache session-start.json on first successful read — never re-read
+		if (!sessionCached) {
+			try {
+				const startFile = Bun.file(SESSION_START_FILE);
+				if (await startFile.exists()) {
+					const data = JSON.parse(await startFile.text());
+					sessionStart = data.sessionStart ?? Date.now();
+					sessionID = data.sessionID;
+					sessionCached = true;
+				}
+				return;
+			} catch {
+				return;
+			}
+		}
 
-  onMount(() => {
-    setState((prev) => ({ ...prev, sessionStart: Date.now() }))
+		const time = formatTime(new Date());
+		const duration = formatDuration(Date.now() - sessionStart);
 
-    clockInterval = setInterval(() => {
-      setTime(formatTime(new Date()))
-    }, 1000)
+		// Read this session's stats from per-session file
+		try {
+			const summaryPath = sessionID
+				? `${STATS_SUMMARY_FILE}.${sessionID}`
+				: STATS_SUMMARY_FILE;
+			const summaryFile = Bun.file(summaryPath);
+			if (await summaryFile.exists()) {
+				const data = JSON.parse(await summaryFile.text());
+				const tokensSaved = data.session?.totalSavedTokens ?? 0;
+				const callCount =
+					data.session?.callCount ?? data.session?.toolCalls ?? 0;
+				const errorCount = data.session?.errorCount ?? 0;
 
-    loadMetrics()
-    metricsInterval = setInterval(loadMetrics, 3000)
+				const avgPerCall =
+					callCount > 0 ? Math.round(tokensSaved / callCount) : 0;
 
-    // Listen to session events inside widget where setState is accessible
-    if (props.api?.event) {
-      props.api.event.on("session.created", () => {
-        setState((prev) => ({ ...prev, sessionStart: Date.now(), tokensSaved: 0, toolCalls: 0 }))
-      })
-      props.api.event.on("session.deleted", () => {
-        setState((prev) => ({ ...prev, sessionStart: null, tokensSaved: 0, toolCalls: 0 }))
-      })
-    }
-  })
+				if (useEmoji) {
+					const emoji = tokensSaved > 0 ? "🗜️" : "🌸";
+					if (isNarrow) {
+						const short = formatTokens(tokensSaved);
+						setDisplay(`${emoji} ${short}`);
+					} else if (isWide && tokensSaved > 0) {
+						const avg = formatTokens(avgPerCall);
+						const err = errorCount > 0 ? `  ⚠${errorCount}` : "";
+						setDisplay(
+							`${emoji} opentoken saved ${formatTokens(tokensSaved)} tok  ${avg}/call${err}  ${duration}  ${time}`,
+						);
+					} else {
+						const tok =
+							tokensSaved > 0
+								? ` saved ${formatTokens(tokensSaved)} tok`
+								: " ready";
+						setDisplay(`${emoji} opentoken${tok}  ${duration}  ${time}`);
+					}
+				} else {
+					if (isNarrow) {
+						setDisplay(`[OT] ${formatTokens(tokensSaved)}`);
+					} else if (isWide && tokensSaved > 0) {
+						const err = errorCount > 0 ? ` err:${errorCount}` : "";
+						setDisplay(
+							`[OPENTOKEN] saved ${formatTokens(tokensSaved)} tok  avg ${formatTokens(avgPerCall)}/call${err}  ${duration}  ${time}`,
+						);
+					} else {
+						const tok =
+							tokensSaved > 0
+								? ` saved ${formatTokens(tokensSaved)} tok`
+								: " ready";
+						setDisplay(`[OPENTOKEN]${tok}  ${duration}  ${time}`);
+					}
+				}
+			} else {
+				if (isNarrow) {
+					setDisplay(useEmoji ? "🌸" : "[OT]");
+				} else {
+					setDisplay(
+						useEmoji
+							? `🌸 opentoken ready  ${duration}  ${time}`
+							: `[OPENTOKEN] ready  ${duration}  ${time}`,
+					);
+				}
+			}
+		} catch {
+			if (isNarrow) {
+				setDisplay(useEmoji ? "🌸" : "[OT]");
+			} else {
+				setDisplay(
+					useEmoji
+						? `🌸 opentoken ready  ${duration}  ${time}`
+						: `[OPENTOKEN] ready  ${duration}  ${time}`,
+				);
+			}
+		}
+	}
 
-  onCleanup(() => {
-    clearInterval(clockInterval)
-    clearInterval(metricsInterval)
-  })
+	onMount(() => {
+		loadMetrics();
+		metricsInterval = setInterval(loadMetrics, 1000);
+	});
 
-  const s = state()
-  const accent = props.theme.current.accent
-  const muted = props.theme.current.textMuted
-  const text = props.theme.current.text
+	onCleanup(() => {
+		clearInterval(metricsInterval);
+	});
 
-  const levelEmoji = s.compressionLevel === "ceiling" ? "🔥" : s.compressionLevel === "ultra" ? "⚡" : s.compressionLevel === "lean" ? "🍃" : "💤"
-  const duration = s.sessionStart ? formatDuration(Date.now() - s.sessionStart) : ""
-
-  const leftText = s.tokensSaved > 0
-    ? `🌸 opentoken ${levelEmoji} saved ${formatTokens(s.tokensSaved)} tokens  ${s.toolCalls} calls`
-    : `🌸 opentoken ${levelEmoji} ready`
-
-  const rightText = [duration, formatTime(new Date())].filter(Boolean).join("  ")
-
-  return (
-    <text fg={text}>
-      <text fg={accent}>{leftText}</text>
-      <text fg={muted}>{"   "}</text>
-      <text fg={muted}>{rightText}</text>
-    </text>
-  )
+	return <text fg={props.theme.current.text}>{display()}</text>;
 }
 
 const plugin: TuiPlugin = async (api, _options, _meta) => {
-  const [isStreaming, setIsStreaming] = createSignal(false)
-
-  api.event.on("session.status", (event: Extract<Event, { type: "session.status" }>) => {
-    const status = event.properties.status
-    if (status?.type === "busy") {
-      setIsStreaming(true)
-    } else if (status?.type === "idle") {
-      setIsStreaming(false)
-    }
-  })
-
-  // Use session_prompt_right slot — proven by opencodeBar reference plugin
-  // This renders inline text next to the prompt, more visible than app_bottom
-  api.slots.register({
-    order: 50,
-    slots: {
-      session_prompt_right(ctx: TuiSlotContext, _props: { session_id: string }) {
-        return (
-          <StatusBarWidget
-            theme={ctx.theme}
-            api={api}
-            getMetrics={() => ({ isStreaming: isStreaming(), isComplete: false })}
-          />
-        )
-      },
-    },
-  })
-
-  api.lifecycle.onDispose(() => {
-    // cleanup handled by Solid.js onCleanup
-  })
-}
+	api.slots.register({
+		order: 50,
+		slots: {
+			session_prompt_right(
+				ctx: TuiSlotContext,
+				_props: { session_id: string },
+			) {
+				return <StatusBarWidget theme={ctx.theme} />;
+			},
+		},
+	});
+	api.lifecycle.onDispose(() => {
+		// cleanup handled by Solid.js onCleanup
+	});
+};
 
 const pluginModule: { id: string; tui: TuiPlugin } = {
-  id: "opentoken",
-  tui: plugin,
-}
+	id: "opentoken",
+	tui: plugin,
+};
 
-export default pluginModule
+export default pluginModule;
