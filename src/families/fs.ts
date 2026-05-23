@@ -60,13 +60,14 @@ export function filterFind(output: string): string {
     groups[top] = (groups[top] || 0) + 1
   }
 
+  const limit = 10
   let result = `${filtered.length} files:\n`
   const sorted = Object.entries(groups).sort((a, b) => b[1] - a[1])
-  for (const [dir, count] of sorted.slice(0, 20)) {
+  for (const [dir, count] of sorted.slice(0, limit)) {
     result += `  ${dir}/: ${count}\n`
   }
-  if (sorted.length > 20) {
-    result += `  ... and ${sorted.length - 20} more directories`
+  if (sorted.length > limit) {
+    result += `  ... and ${sorted.length - limit} more directories`
   }
 
   return result
@@ -82,7 +83,17 @@ export function filterTree(output: string): string {
     return depth <= 6 // ~3 levels
   })
 
-  // Add summary if truncated
+  // When tree is very broad (>80 lines), switch to head+tail preservation
+  // This preserves the structure at both ends without dumping a massive wall of text
+  const MAX_TREE_LINES = 80
+  if (filtered.length > MAX_TREE_LINES) {
+    const head = filtered.slice(0, 40)
+    const tail = filtered.slice(-40)
+    const skipped = filtered.length - 80
+    return head.join("\n") + `\n  ... ${skipped} entries omitted ...\n` + tail.join("\n")
+  }
+
+  // Add summary line if present
   const summaryLine = lines.find((l) => /^\d+ director/.test(l) || /^\d+ file/.test(l))
   if (summaryLine) {
     filtered.push(summaryLine)

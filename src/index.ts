@@ -9,7 +9,7 @@ import fs from "fs"
 
 // Phase 1 imports
 import { preCallFilter } from "./precall"
-import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content, normalizeWhitespace, normalizeLogNoise, minimizeTableWhitespace, minifyJSON } from "./postcall"
+import { stripThinkingBlocks, detectAndHandleBinary, suppressOversized, aliasJsonKeys, cleanWhitespaceAndNulls, shortenUrls, stripBase64Content, normalizeWhitespace, normalizeLogNoise, minimizeTableWhitespace, minifyJSON, stripAnsi } from "./postcall"
 import { convertToTOON } from "./toon"
 import { compressLTSC } from "./ltsc"
 import { compressLZW } from "./lzw"
@@ -35,7 +35,10 @@ import { filterCargoOutput } from "./families/cargo"
 import { filterTestOutput } from "./families/test"
 import { filterFsOutput } from "./families/fs"
 import { filterGeneric } from "./families/generic"
-import { filterRead } from "./filters/read"
+import { filterDockerOutput } from "./families/docker"
+import { filterPipOutput } from "./families/pip"
+import { filterMakeOutput } from "./families/make"
+import { filterRead, SOURCE_EXTENSIONS } from "./filters/read"
 import { filterGrep } from "./filters/grep"
 import { filterGlob } from "./filters/glob"
 import { redactSecrets } from "./utils/secrets"
@@ -220,12 +223,16 @@ interface ToolOutputAfter {
 
 // ─── HELPERS ───
 
+// LOSSLESS_LINE_THRESHOLD controls entry to lossless stages (ANSI strip, log fold, whitespace).
+// Hard truncation cap stays at SHORT_OUTPUT_THRESHOLD (80) in the generic filter.
+// This split ensures medium outputs (40-80 lines) get cleaned without risk of truncation.
+const LOSSLESS_LINE_THRESHOLD = 40
 const SHORT_OUTPUT_THRESHOLD = 80
 const MAX_OUTPUT_LENGTH = 20000
 
 function shouldSkipFilter(output: string): boolean {
   const lines = output.split("\n")
-  return lines.length < SHORT_OUTPUT_THRESHOLD && output.length < MAX_OUTPUT_LENGTH
+  return lines.length < LOSSLESS_LINE_THRESHOLD && output.length < MAX_OUTPUT_LENGTH
 }
 
 function hasErrors(output: string): boolean {
@@ -272,6 +279,9 @@ async function applyBashFilter(sessionID: string, command: string, output: strin
   if (suppressed.suppressed) return suppressed.result
 
   output = safeStage("stripThinkingBlocks", () => stripThinkingBlocks(output), output)
+
+  // ANSI escape stripping — zero risk, applies even on short outputs
+  output = safeStage("stripAnsi", () => stripAnsi(output), output)
 
   if (shouldSkipFilter(output)) return output
 
@@ -328,7 +338,34 @@ async function applyBashFilter(sessionID: string, command: string, output: strin
         filtered = safeStage("filterTestOutput", () => filterTestOutput(command, output), output)
         break
       case "fs":
-        filtered = safeStage("filterFsOutput", () => filterFsOutput(command, output), output)
+        // Route `cat <source_file>` through the read pipeline for skeleton extraction.
+        // Guard: no flags, pipes, redirects, globs, or multiple files — only cat <path>.
+        const catReadMatch = command.match(/^\s*cat\s+(?!-)([^\s|&;>'<*"]+)\s*$/)
+        if (catReadMatch) {
+          const catPath = catReadMatch[1]
+          const ext = "." + (catPath.split(".").pop()?.toLowerCase() || "")
+          if (SOURCE_EXTENSIONS.includes(ext)) {
+            filtered = safeStage("filterRead", () => filterRead(catPath, output), output)
+            break
+          }
+        }
+        // Route read-only fs tools through generic for better head+tail preservation.
+        // Cat (non-source), wc, du, df benefit from generic's head(20)+tail(20) over fs's prefix-only truncation.
+        // Diff, sort, uniq stay in fs — their output is order-sensitive and needs full visibility.
+        if (/^\s*(wc|du|df)\s/.test(command + " ")) {
+          filtered = safeStage("filterGeneric", () => filterGeneric(output), output)
+        } else {
+          filtered = safeStage("filterFsOutput", () => filterFsOutput(command, output), output)
+        }
+        break
+      case "docker":
+        filtered = safeStage("filterDockerOutput", () => filterDockerOutput(command, output), output)
+        break
+      case "pip":
+        filtered = safeStage("filterPipOutput", () => filterPipOutput(command, output), output)
+        break
+      case "make":
+        filtered = safeStage("filterMakeOutput", () => filterMakeOutput(command, output), output)
         break
       default:
         filtered = safeStage("filterGeneric", () => filterGeneric(output), output)

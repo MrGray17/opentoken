@@ -69,7 +69,7 @@ export function filterGrep(output: string): string {
       if (NOISE_PATTERNS.some((p) => p.test(line))) continue
 
       // Parse: "file:line:content" or "file:line:col:content" (vimgrep)
-      const match = line.match(/^(.+?):(\d+)(?::(\d+))?:?(.*)$/)
+      const match = line.match(/^([^:]+):(\d+)(?::(\d+))?:?(.*)$/)
       if (!match) continue
 
       const [, file, lineNum, , content] = match

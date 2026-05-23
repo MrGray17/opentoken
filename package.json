@@ -40,7 +40,8 @@
   },
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "checks:regex": "bun run scripts/check-regex-safety.ts"
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.15.5",

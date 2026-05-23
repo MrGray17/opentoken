@@ -1,6 +1,6 @@
 // Read result filter — outline source files, pass through short files
 
-const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".py", ".rs", ".go", ".java", ".c", ".cpp", ".h", ".hpp", ".rb", ".swift", ".kt", ".scala"]
+export const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".py", ".rs", ".go", ".java", ".c", ".cpp", ".h", ".hpp", ".rb", ".swift", ".kt", ".scala"]
 const CONFIG_EXTENSIONS = [".json", ".yaml", ".yml", ".toml", ".xml", ".ini", ".cfg", ".env", ".conf"]
 const DOC_EXTENSIONS = [".md", ".mdx", ".rst", ".txt"]
 

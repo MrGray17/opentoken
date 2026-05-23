@@ -8,14 +8,7 @@
 // #28 Aggressive whitespace normalization
 // #29 Log normalization (timestamps, PIDs, elapsed time → static placeholders)
 // #30 Table whitespace minimization (strip padding from CLI tables)
-  // #31 JSON minification (lossless whitespace removal)
-
-  // #32: ANSI escape sequence stripping — zero risk
-  // Strips color codes, cursor movements, and terminal control sequences
-  // that tokenizers count as real tokens but carry zero semantic value
-  export function stripAnsi(text: string): string {
-    return text.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
-  }
+// #31 JSON minification (lossless whitespace removal)
 
 import { convertToTOON } from "./toon"
 
