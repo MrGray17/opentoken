@@ -66,6 +66,11 @@
       "type": "boolean",
       "default": true,
       "description": "TUI: use emoji vs ASCII fallback"
+    },
+    "allowLockFileReads": {
+      "type": "boolean",
+      "default": false,
+      "description": "Allow reading lock files despite minified/generated blocking"
     }
   },
   "additionalProperties": false

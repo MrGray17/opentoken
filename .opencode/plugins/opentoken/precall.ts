@@ -25,7 +25,10 @@ const MINIFIED_PATTERNS = [
   /(?:^|\/)\.venv\//,
   /(?:^|\/)venv\//,
   /(?:^|\/)vendor\//,
-  // Lock files — large, auto-generated, worthless in context
+]
+
+// Lock file patterns — large, auto-generated, blocked by default, overridable
+const LOCK_FILE_PATTERNS = [
   /package-lock\.json$/,
   /yarn\.lock$/,
   /Cargo\.lock$/,
@@ -192,8 +195,11 @@ const COMMAND_REWRITES: { match: RegExp; rewrite: (cmd: string) => string }[] = 
 ]
 
 // #6: Check if file path is minified/generated
-export function isMinifiedOrGenerated(filePath: string): boolean {
-  return MINIFIED_PATTERNS.some((p) => p.test(filePath))
+export function isMinifiedOrGenerated(filePath: string, allowLockFiles?: boolean): boolean {
+  if (allowLockFiles) {
+    return MINIFIED_PATTERNS.some((p) => p.test(filePath))
+  }
+  return MINIFIED_PATTERNS.some((p) => p.test(filePath)) || LOCK_FILE_PATTERNS.some((p) => p.test(filePath))
 }
 
 // #3: Rewrite command to quiet version
@@ -226,7 +232,7 @@ export function checkEditSize(content: string): { allowed: boolean; reason?: str
 }
 
 // Pre-call hook: intercept tool args before execution
-export function preCallFilter(tool: string, args: Record<string, unknown>): {
+export function preCallFilter(tool: string, args: Record<string, unknown>, options?: { allowLockFiles?: boolean }): {
   blocked?: boolean
   reason?: string
   modifiedArgs?: Record<string, unknown>
@@ -241,7 +247,7 @@ export function preCallFilter(tool: string, args: Record<string, unknown>): {
 
   // #6: Block reads of minified/generated files
   if (tool === "read" && typeof args.filePath === "string") {
-    if (isMinifiedOrGenerated(args.filePath)) {
+    if (isMinifiedOrGenerated(args.filePath, options?.allowLockFiles)) {
       return {
         blocked: true,
         reason: `Blocked: ${args.filePath} is minified/generated (use outline instead)`,

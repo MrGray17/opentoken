@@ -109,6 +109,7 @@ interface OpenTokenConfig {
 	enableSessionMemory: boolean; // Cross-session memory persistence (default false)
 	enableTui: boolean; // TUI status bar (default true)
 	tuiUseEmoji: boolean; // TUI: use emoji vs ASCII (default true)
+	allowLockFileReads: boolean; // Allow reading lock files despite minified/generated blocking (default false)
 }
 
 const DEFAULT_CONFIG: OpenTokenConfig = {
@@ -123,6 +124,7 @@ const DEFAULT_CONFIG: OpenTokenConfig = {
 	enableSessionMemory: false, // Cross-session memory persistence
 	enableTui: true, // TUI status bar
 	tuiUseEmoji: true, // TUI: use emoji vs ASCII
+	allowLockFileReads: false, // Lock files blocked by default
 };
 
 let config: OpenTokenConfig = DEFAULT_CONFIG;
@@ -1238,7 +1240,9 @@ export const OpenTokenPlugin: Plugin = async ({ directory }) => {
 			try {
 				const tool = validateToolName(input.tool);
 
-				const result = preCallFilter(tool, output.args || {});
+				const result = preCallFilter(tool, output.args || {}, {
+					allowLockFiles: config.allowLockFileReads,
+				});
 
 				if (result.blocked) {
 					output.result = `[OpenToken blocked] ${result.reason}`;
