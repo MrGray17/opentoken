@@ -2,7 +2,7 @@
 
 Token-saving companion for OpenCode. Intercepts, filters, and compresses tool outputs before they reach the model.
 
-**Typical savings: 50-90% on tool output tokens.**
+**Typical savings: 70-90% on tool output tokens.**
 
 ## Real Production Numbers
 
