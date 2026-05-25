@@ -2,54 +2,34 @@
 
 # ⚡ OpenToken
 
-**Token-saving companion for OpenCode** — **74% overall compression** (93% median on compressible outputs) without changing model behavior.
-
-🧊 **5M+ tokens saved** (74% avg compression, 5-day session)
+Token-saving companion for OpenCode.  
+**5,078,587 tokens saved** in production (74% overall compression).
 
 <pre lang="bash">opencode plugin @mrgray17/opentoken@latest --global</pre>
 
 [![npm](https://img.shields.io/npm/v/@mrgray17/opentoken?color=blue)](https://www.npmjs.com/package/@mrgray17/opentoken)
 [![stars](https://img.shields.io/github/stars/MrGray17/opentoken?color=yellow)](https://github.com/MrGray17/opentoken)
 [![CI](https://img.shields.io/github/actions/workflow/status/MrGray17/opentoken/ci.yml?label=CI)](https://github.com/MrGray17/opentoken/actions)
-[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Bun](https://img.shields.io/badge/bun-%3E%3D1.2.0-fbb744)](https://bun.sh)
-[![downloads](https://img.shields.io/npm/dt/@mrgray17/opentoken)](https://www.npmjs.com/package/@mrgray17/opentoken)
-[![npm size](https://img.shields.io/npm/unpacked-size/@mrgray17/opentoken)](https://www.npmjs.com/package/@mrgray17/opentoken)
-[![TypeScript](https://img.shields.io/github/languages/top/MrGray17/opentoken)](https://github.com/MrGray17/opentoken)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![awesome-opencode](https://img.shields.io/badge/awesome--opencode-listed-blueviolet)](https://github.com/anomalyco/awesome-opencode)
 
-⭐ Star on GitHub — it helps · 🐛 [Report issues](https://github.com/MrGray17/opentoken/issues)
+[Star on GitHub](https://github.com/MrGray17/opentoken) · [Report issues](https://github.com/MrGray17/opentoken/issues)
 
 </div>
 
-## See It In Action
+## Before & After
 
-A real git diff — **2,114 tokens** raw:
-
-```diff
-diff --git a/src/autoescalate.ts b/src/autoescalate.ts
-index abc123..def456 100644
---- a/src/autoescalate.ts
-+++ b/src/autoescalate.ts
-@@ -10,6 +10,12 @@ import {
- import { SessionStore } from "./-
- session-store";
- const MAX_RETRIES = 3;
-+
-+  +/// <reference types="bun-types" />
-+  +import { z } from "zod";
-```
-
-Same query with OpenToken — **407 tokens** (↓81%):
+A real query. Raw output was 2,114 tokens. With OpenToken: 407 tokens.
 
 ```
 ❯ opencode "what changed in this diff?"
 
-  📦 LTSC: src/autoescalate.ts +2 imports
-  📦 Skeleton: src/autoescalate.ts +~8 lines
+  LTSC:    src/autoescalate.ts +2 imports (previously 18 context lines)
+  Skeleton: src/autoescalate.ts +~8 lines (bun-types import, zod import)
 ```
 
-The model speaks normally — no caveman, no degraded reasoning.
+The model sees the same semantic content. It talks normally, responds the same way.
 
 ## Install
 
@@ -58,7 +38,7 @@ The model speaks normally — no caveman, no degraded reasoning.
 | **opencode** | `opencode plugin @mrgray17/opentoken@latest --global` | Everyone |
 | **npm** | `npm install -g @mrgray17/opentoken` + add to `opencode.json` | npm users |
 | **curl** | `curl -fsSL https://raw.githubusercontent.com/MrGray17/opentoken/main/install.sh \| bash` | No-npm setup |
-| **git** | `git clone ... ~/.config/opencode/plugins/opentoken && cd $_ && bun install` | Dev/contributors |
+| **git** | `git clone ... ~/.config/opencode/plugins/opentoken && cd $_ && bun install` | Contributors |
 
 <details>
 <summary>Verify checksum</summary>
@@ -69,28 +49,13 @@ curl -fsSL https://raw.githubusercontent.com/MrGray17/opentoken/main/SHA256SUMS 
 
 </details>
 
-Zero config — auto-loads on next OpenCode start.
+Zero config. Auto-loads on next OpenCode start.
 
-## How It Compares
+## How It Works
 
-| Feature | OpenToken | Prompt patch | Built-in |
-|---------|-----------|-------------|----------|
-| **Deflation ratio** | 4–8× | 1.5× | 1.2× |
-| **Lossless LTSC** | ✅ | ❌ | ❌ |
-| **LZW substitution** | ✅ | ❌ | ❌ |
-| **Family-specific filters** | ✅ 7 families | ❌ | ❌ |
-| **Log/diff folding** | ✅ | ❌ | ❌ |
-| **Secrets redaction** | ✅ 30+ patterns | ❌ | ❌ |
-| **Cross-call dedup** | ✅ | ❌ | ❌ |
-| **Install** | `opencode plugin` | npm | prompt patch |
+OpenToken intercepts tool output before it reaches the model and runs it through 35 stages of compression. Each stage is reversible or lossless — if output grows, the original is returned.
 
-## The Pipeline
-
-> [!NOTE]
-> **0-risk principle**: every stage compares filtered vs original — if output grew, original wins. OpenToken never makes things worse.
-
-<details>
-<summary><b>Input (35 layers)</b> — tool output → compressed</summary>
+> The 0-risk principle: every stage compares filtered vs original. OpenToken never makes things worse.
 
 ```
 tool output
@@ -114,10 +79,7 @@ tool output
            ▼ compressed output
 ```
 
-</details>
-
-<details>
-<summary><b>Output (7 layers)</b> — model responses → compact</summary>
+Model responses go through 7 similar stages on the way out:
 
 ```
 model response
@@ -131,33 +93,44 @@ model response
        ▼ compressed response
 ```
 
-</details>
-
 ## Real Numbers
 
 | Metric | Value |
 |--------|-------|
-| Tokens saved | **5,078,587** |
-| $ saved | **$152.36** |
+| Tokens saved | 5,078,587 |
+| $ saved (at Claude Pro rates) | $152.36 |
 | Overall compression | 74% |
-| Median (compressible calls) | 93% |
-| Best tool (read) | 96% |
-| Peak single call | 48,291 tokens (100%) |
+| Median (compressible calls only) | 93% |
+| Best single-tool average (read) | 96% |
+| Peak single call | 48,291 tokens (100% savings) |
 
-Detailed stats: `opentoken_stats` MCP tool.
+Per-call stats available via the `opentoken_stats` MCP tool.
+
+## Comparison
+
+| Feature | OpenToken | Prompt patch | Built-in |
+|---------|-----------|-------------|----------|
+| Deflation ratio | 4–8× | 1.5× | 1.2× |
+| Lossless LTSC | Yes | No | No |
+| LZW substitution | Yes | No | No |
+| Family-specific filters | Yes — 7 | No | No |
+| Log/diff folding | Yes | No | No |
+| Secrets redaction | Yes — 30+ patterns | No | No |
+| Cross-call dedup | Yes | No | No |
+| Install | `opencode plugin` | npm | Prompt patch |
 
 ## Security
 
-- **Secrets redaction first** — 30+ patterns, before any processing
+- **Secrets redaction runs first** — 30+ patterns, before any other processing
 - **No telemetry** — never phones home, all data stays local
 - **No exec/eval** — pure function chains only
-- **Atomic writes** — tmp+rename, no partial files
-- **Graceful failure** — everything in try/catch, plugin never breaks the host
+- **Atomic writes** — temp + rename, no partial file writes
+- **Graceful failure** — everything wrapped in try/catch, plugin never breaks the host
 
 ## Architecture
 
 <details>
-<summary><b>src/</b> — 20 modules, zero build step (Bun runs TS natively)</summary>
+<summary><b>src/</b> — 20 modules, Bun runs TypeScript natively (no build step)</summary>
 
 ```
 src/
@@ -171,7 +144,7 @@ src/
   ├── dedup.ts          Cross-call deduplication
   ├── autoescalate.ts   Progressive compression as context fills
   ├── skeleton.ts       AST skeleton extraction
-  ├── toon.ts           JSON → tabular conversion
+  ├── toon.ts           JSON to tabular conversion
   ├── router.ts         Content-aware compression routing
   ├── families/         7 command-family filters
   ├── filters/          3 tool-specific filters
@@ -181,7 +154,9 @@ src/
 </details>
 
 <details>
-<summary><b>Configuration</b> — optional, create <code>~/.config/opencode/token/config.json</code></summary>
+<summary><b>Configuration</b> — optional</summary>
+
+Create `~/.config/opencode/token/config.json`:
 
 ```json
 {
@@ -200,6 +175,6 @@ Full schema: `.opencode/opentoken-config-schema.json`
 
 <div align="center">
 
-MIT · Built for [OpenCode](https://github.com/anomalyco/opencode) · [GitHub](https://github.com/MrGray17/opentoken) · [npm](https://www.npmjs.com/package/@mrgray17/opentoken)
+MIT · [GitHub](https://github.com/MrGray17/opentoken) · [npm](https://www.npmjs.com/package/@mrgray17/opentoken) · Built for [OpenCode](https://github.com/anomalyco/opencode)
 
 </div>
