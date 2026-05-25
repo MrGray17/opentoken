@@ -5,6 +5,8 @@
     <a href="https://github.com/MrGray17/opentoken/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
     <img src="https://img.shields.io/badge/bun-%3E%3D1.2.0-fbb744.svg" alt="Bun >=1.2.0">
     <a href="https://github.com/MrGray17/opentoken/stargazers"><img src="https://img.shields.io/github/stars/MrGray17/opentoken" alt="GitHub Stars"></a>
+    <a href="https://www.npmjs.com/package/@mrgray17/opentoken"><img src="https://img.shields.io/npm/v/@mrgray17/opentoken" alt="npm version"></a>
+    <a href="https://www.npmjs.com/package/@mrgray17/opentoken"><img src="https://img.shields.io/npm/dt/@mrgray17/opentoken" alt="npm downloads"></a>
   </p>
   <p>
     <strong>Input pipeline:</strong> 70–90% savings on tool output tokens — <strong>Output pipeline:</strong> max conciseness with zero risk.
@@ -178,7 +180,26 @@ When `enableOutputSaving` is true (default), model responses pass through an add
 - **Bun** runtime >= 1.2.0
 - **OpenCode** with plugin support
 
-### Install via curl (recommended)
+### Install via OpenCode plugin command
+
+```bash
+opencode plugin @mrgray17/opentoken@latest --global
+```
+
+### Install via npm
+
+```bash
+npm install -g @mrgray17/opentoken
+```
+
+Then add to `opencode.json`:
+```json
+{
+  "plugin": ["@mrgray17/opentoken"]
+}
+```
+
+### Install via curl (recommended for non-npm users)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MrGray17/opentoken/refs/heads/main/install.sh | bash
@@ -187,7 +208,7 @@ curl -fsSL https://raw.githubusercontent.com/MrGray17/opentoken/refs/heads/main/
 Install a specific version:
 
 ```bash
-OPENTOKEN_VERSION=1.1.0 curl -fsSL https://raw.githubusercontent.com/MrGray17/opentoken/refs/heads/main/install.sh | bash
+OPENTOKEN_VERSION=1.2.0 curl -fsSL https://raw.githubusercontent.com/MrGray17/opentoken/refs/heads/main/install.sh | bash
 ```
 
 Verify checksum (recommended):
