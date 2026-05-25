@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ── Config ──────────────────────────────────────────────
-OPENTOKEN_VERSION="${OPENTOKEN_VERSION:-1.1.0}"
+OPENTOKEN_VERSION="${OPENTOKEN_VERSION:-1.2.0}"
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opentoken"
 PLUGIN_FILE="${HOME}/.config/opencode/plugins/opentoken.ts"
 TUI_FILE="${HOME}/.config/opencode/plugins/opentoken-tui.tsx"
