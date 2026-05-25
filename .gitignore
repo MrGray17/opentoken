@@ -3,3 +3,16 @@ dist/
 *.tsbuildinfo
 .env
 .cache/
+
+# Internal dev docs (not for public)
+TO-DO.md
+AGENTS.md
+BUILD_PLAN.md
+Bugs.md
+
+# Logs
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
