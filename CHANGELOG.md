@@ -4,6 +4,24 @@ All notable changes to OpenToken will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.0] — 2026-05-25
+
+### Added
+- Output token savings pipeline — system conciseness directive, maxOutputTokens cap, response compression
+- New `src/outputcomp.ts` — boilerplate elimination (18 patterns), thinking block strip, ANSI strip, URL shorten
+- `chat.params` hook — caps model response length via `maxOutputTokens`
+- `experimental.text.complete` hook — compresses completed model responses
+- `experimental.chat.system.transform` — conciseness directive fires independently of history compression
+- `enableOutputSaving` config key (default `true`)
+- `SessionTracker.outputTokensSaved` field + `trackOutputTokensSaved()` export
+- `MetricEntry.role` field — distinguishes `"tool"` vs `"assistant"` entries
+- `tests/outputcomp.test.ts` — 21 tests for output compression pipeline
+
+### Changed
+- **TUI**: Stripped to clock-only widget (removed stats/metrics loading — saves tokens on the TUI slot itself)
+- **README**: Full rewrite with comparison table vs DCP/Caveman/RTK, output saving docs, all config keys, restored L1–L42 layer table
+- **Mirror**: Synced `.opencode/plugins/opentoken/` — added missing ltsc.ts, lzw.ts, toon.ts, session-store.ts, docker.ts, make.ts, pip.ts
+
 ## [1.1.0] — 2026-05-20
 
 ### Added
