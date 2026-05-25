@@ -108,16 +108,22 @@ Per-call stats available via the `opentoken_stats` MCP tool.
 
 ## Comparison
 
-| Feature | OpenToken | Prompt patch | Built-in |
-|---------|-----------|-------------|----------|
-| Deflation ratio | 4–8× | 1.5× | 1.2× |
-| Lossless LTSC | Yes | No | No |
-| LZW substitution | Yes | No | No |
-| Family-specific filters | Yes — 7 | No | No |
-| Log/diff folding | Yes | No | No |
-| Secrets redaction | Yes — 30+ patterns | No | No |
-| Cross-call dedup | Yes | No | No |
-| Install | `opencode plugin` | npm | Prompt patch |
+| | OpenToken | DCP | Caveman | RTK |
+|---|---|---|---|---|
+| Input compression | 35 layers | Yes | No | No |
+| Output compression | 7 layers | No | No | No |
+| Model speaks normally | Yes | Yes | No | Yes |
+| Zero-risk every stage | Yes | No | N/A | No |
+| AST skeleton extraction | Yes | No | No | No |
+| LZ77 lossless (LTSC) | Yes | No | No | No |
+| LZW token substitution | Yes | No | No | No |
+| Family-specific filters | 7 families | No | No | No |
+| Log/diff folding | Yes | No | No | No |
+| Secrets redaction | 30+ patterns | No | No | No |
+| Cross-call dedup | Yes | No | No | No |
+| Install | `opencode plugin` | npm | prompt | patch |
+
+The model speaks normally — no caveman, no degraded reasoning.
 
 ## Security
 
