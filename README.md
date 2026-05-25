@@ -8,9 +8,16 @@
     <tr>
       <td><img src="https://img.shields.io/npm/v/@mrgray17/opentoken" alt="npm"></td>
       <td><img src="https://img.shields.io/github/stars/MrGray17/opentoken" alt="stars"></td>
+      <td><img src="https://img.shields.io/github/last-commit/MrGray17/opentoken" alt="last commit"></td>
       <td><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></td>
       <td><img src="https://img.shields.io/badge/bun-%3E%3D1.2.0-fbb744" alt="Bun"></td>
+    </tr>
+    <tr>
       <td><img src="https://img.shields.io/npm/dt/@mrgray17/opentoken" alt="downloads"></td>
+      <td><img src="https://img.shields.io/npm/unpacked-size/@mrgray17/opentoken" alt="npm size"></td>
+      <td><img src="https://img.shields.io/github/languages/top/MrGray17/opentoken" alt="TypeScript"></td>
+      <td><img src="https://img.shields.io/github/actions/workflow/status/MrGray17/opentoken/ci.yml?label=CI" alt="CI"></td>
+      <td><img src="https://img.shields.io/badge/awesome--opencode-listed-blue" alt="awesome-opencode"></td>
     </tr>
   </table>
 
@@ -19,29 +26,46 @@
 
 ---
 
-## Before → After
+## See It In Action
 
-A real `git diff` output: **2,114 tokens → 407 tokens (81% savings).**
+<table>
+<tr>
+<th width="50%">Before — 2,114 tokens</th>
+<th width="50%">After — 407 tokens (81% ↓)</th>
+</tr>
+<tr>
+<td>
 
-```
- BEFORE                                AFTER
-─────────────────────────────────────  ─────────────────────────────────────
- diff --git a/src/index.ts             M src/index.ts
- b/src/index.ts                       ─────────────────────────────────────
- index abc123..def456 100644
- --- a/src/index.ts
- +++ b/src/index.ts
- @@ -10,6 +10,12 @@ import {
-  import { SessionStore } from "./-
-  session-store";
-                                    ↳ Family: git
-  const MAX_RETRIES = 3;              
-+                                    81% compression  •  2,114 → 407 tokens
-+/// <reference types="bun-types" />  
+```diff
+diff --git a/src/index.ts b/src/index.ts
+index abc123..def456 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -10,6 +10,12 @@ import {
+ import { SessionStore } from "./-
+ session-store";
+                                        
+ const MAX_RETRIES = 3;               
++
++/// <reference types="bun-types" />
 +import { z } from "zod";
 ```
 
-Works on **any tool output** — file reads, builds, test suites, ls, docker, cargo, npm, pip.
+</td>
+<td>
+
+```
+M src/index.ts
+─────────────────────────────────────────
+
+Family: git  •  81% compression
+```
+
+</td>
+</tr>
+</table>
+
+Works on **any tool output** — file reads, builds, test suites, ls, docker, cargo, npm, pip. The model sees compressed input but responds normally.
 
 ---
 
@@ -197,19 +221,7 @@ Optional. Create `~/.config/opentoken/config.json`:
 
 Full schema: `.opencode/opentoken-config-schema.json`
 
----
 
-## Badges
-
-<p>
-  <a href="https://github.com/awesome-opencode/awesome-opencode/pull/373"><img src="https://img.shields.io/badge/awesome--opencode-listed-blue" alt="awesome-opencode"></a>
-  <img src="https://img.shields.io/github/last-commit/MrGray17/opentoken" alt="last commit">
-  <img src="https://img.shields.io/github/actions/workflow/status/MrGray17/opentoken/ci.yml" alt="CI">
-  <img src="https://img.shields.io/github/languages/top/MrGray17/opentoken" alt="TypeScript">
-  <a href="https://www.npmjs.com/package/@mrgray17/opentoken"><img src="https://img.shields.io/npm/unpacked-size/@mrgray17/opentoken" alt="npm size"></a>
-</p>
-
----
 
 <div align="center">
   <p>MIT · Built for <a href="https://github.com/MrGray17/opencode">OpenCode</a> · <a href="https://github.com/MrGray17/opentoken">GitHub</a> · <a href="https://www.npmjs.com/package/@mrgray17/opentoken">npm</a></p>
