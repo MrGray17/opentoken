@@ -4,6 +4,7 @@
 // Session-keyed to prevent cross-session data leakage
 
 import crypto from "node:crypto";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { SessionStore } from "./utils/session-store";
@@ -148,9 +149,8 @@ export async function cleanupRewind(
 		if (now - entry.timestamp > maxAgeMs) {
 			try {
 				const filePath = path.join(REWIND_DIR, `${id}.txt`);
-				if (await Bun.file(filePath).exists()) {
-					const proc = Bun.spawn(["rm", "-f", filePath]);
-					await proc.exited;
+				if (fs.existsSync(filePath)) {
+					fs.unlinkSync(filePath);
 				}
 			} catch {
 				// Ignore
@@ -165,10 +165,8 @@ export async function cleanupRewind(
 
 async function ensureDir(): Promise<void> {
 	try {
-		const dirExists = await Bun.file(REWIND_DIR).exists();
-		if (!dirExists) {
-			const proc = Bun.spawn(["mkdir", "-p", REWIND_DIR]);
-			await proc.exited;
+		if (!fs.existsSync(REWIND_DIR)) {
+			fs.mkdirSync(REWIND_DIR, { recursive: true });
 		}
 	} catch {
 		// Ignore

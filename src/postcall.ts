@@ -20,8 +20,6 @@ export function stripAnsi(text: string): string {
 	);
 }
 
-const MAX_OUTPUT_BYTES = 100 * 1024; // 100KB — block entirely
-
 // #15: Strip reasoning/thinking blocks
 const THINKING_BLOCKS: RegExp[] = [
 	/<antThinking>[\s\S]*?<\/antThinking>/g,
@@ -76,15 +74,16 @@ export function detectAndHandleBinary(text: string): {
 // #17: Output suppression — block entirely if too large
 export function suppressOversized(
 	text: string,
-	maxBytes: number = MAX_OUTPUT_BYTES,
+	maxBytes: number,
 ): {
 	suppressed: boolean;
 	result: string;
 } {
-	if (text.length > maxBytes) {
+	const byteLen = Buffer.byteLength(text, "utf8");
+	if (byteLen > maxBytes) {
 		return {
 			suppressed: true,
-			result: `[Output suppressed: ${Math.round(text.length / 1024)}KB exceeds ${Math.round(maxBytes / 1024)}KB limit — use targeted queries instead]`,
+			result: `[Output suppressed: ${Math.round(byteLen / 1024)}KB exceeds ${Math.round(maxBytes / 1024)}KB limit — use targeted queries instead]`,
 		};
 	}
 	return { suppressed: false, result: text };

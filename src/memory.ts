@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const MEMORY_DIR = path.join(os.homedir(), ".config", "opencode", "token");
+const MEMORY_DIR = path.join(os.homedir(), ".config", "opentoken");
 const MEMORY_PATH = path.join(MEMORY_DIR, "MEMORY.md");
 const MAX_FACTS = 50;
 const ESTIMATED_SAVINGS_PER_FACT = 80;
@@ -18,7 +18,7 @@ function ensureDir(): void {
 			fs.mkdirSync(MEMORY_DIR, { recursive: true });
 		}
 	} catch {
-		/* ignore */
+		/* fs */
 	}
 }
 
@@ -48,10 +48,10 @@ function writeFacts(facts: string[]): void {
 		try {
 			fs.chmodSync(MEMORY_PATH, 0o600);
 		} catch {
-			/* ignore */
+			/* fs */
 		}
 	} catch {
-		/* ignore */
+		/* fs */
 	}
 }
 
@@ -172,7 +172,7 @@ export function clearMemory(): void {
 			fs.unlinkSync(MEMORY_PATH);
 		}
 	} catch {
-		/* ignore */
+		/* fs */
 	}
 }
 

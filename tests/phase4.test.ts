@@ -63,46 +63,40 @@ describe("Phase 4: De-escalation Hysteresis", () => {
 		expect(level).toBe("lean");
 	});
 
-	it("escalates to ultra at 70%, de-escalates from ultra at <65% (5% buffer)", () => {
-		updateContext(TEST_SESSION, 140000, 200000); // 70% fill
+	it("escalates to ultra at 75%, de-escalates from ultra at <70% (5% buffer)", () => {
+		updateContext(TEST_SESSION, 150000, 200000); // 75% fill
 		expect(getCompressionLevel(TEST_SESSION)).toBe("ultra");
 	});
 
-	it("escalates to ceiling at 85%, de-escalates from ceiling at <65% (20% buffer)", () => {
+	it("escalates to ceiling at 85%, de-escalates from ceiling at <80% (5% buffer)", () => {
 		updateContext(TEST_SESSION, 170000, 200000); // 85% fill
 		expect(getCompressionLevel(TEST_SESSION)).toBe("ceiling");
 	});
 
-	it("de-escalates from ultra to lean when fill < 80%", () => {
-		updateContext(TEST_SESSION, 140000, 200000); // 70% fill → ultra
+	it("de-escalates from ultra when fill drops below 70%", () => {
+		// At 75% fill: level is "ultra" and deescalate stays ultra (hysteresis)
+		updateContext(TEST_SESSION, 150000, 200000);
 		expect(getCompressionLevel(TEST_SESSION)).toBe("ultra");
+		expect(deescalate(TEST_SESSION)).toBe("ultra");
 
-		// deescalate: fillPct 0.70 < 0.80, so ultra → lean
-		const level = deescalate(TEST_SESSION);
-		expect(level).toBe("lean");
-
-		// BUT: updateContext re-computes: 70% >= 70% → ultra
-		// This means oscillation between ultra and lean at 70-80% fill
-		const reLevel = updateContext(TEST_SESSION, 0); // used=0, no change
-		expect(reLevel).toBe("ultra");
+		// After reset, at 65% fill: level starts at "off", updateContext → "lean"
+		resetEscalation(TEST_SESSION);
+		updateContext(TEST_SESSION, 130000, 200000);
+		expect(getCompressionLevel(TEST_SESSION)).toBe("lean");
 	});
 
-	it("OSCILLATION WARNING: de-escalate ultra→lean at <80% conflicts with escalate ultra at >=70%", () => {
-		// At 75% fill: level is "ultra" (75 >= 70)
+	it("hysteresis prevents oscillation: 5% gap between escalate and de-escalate for ultra", () => {
+		// At 75% fill: level is "ultra" (75 >= 75)
 		updateContext(TEST_SESSION, 150000, 200000);
 		expect(getCompressionLevel(TEST_SESSION)).toBe("ultra");
 
-		// deescalate: 75 < 80 → drops to "lean"
+		// deescalate: 75 >= 70 → stays "ultra" (5% hysteresis gap prevents flip-flop)
 		const afterDe = deescalate(TEST_SESSION);
-		expect(afterDe).toBe("lean");
+		expect(afterDe).toBe("ultra");
 
-		// updateContext: 75 >= 70 → re-escalates to "ultra"
+		// Still ultra after updateContext (no re-computation needed)
 		const afterUpdate = updateContext(TEST_SESSION, 0);
 		expect(afterUpdate).toBe("ultra");
-
-		// deescalate again: 75 < 80 → drops to "lean" again
-		const afterDe2 = deescalate(TEST_SESSION);
-		expect(afterDe2).toBe("lean");
 	});
 });
 

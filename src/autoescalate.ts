@@ -81,7 +81,7 @@ export function resetContextUsed(sessionID: string): void {
 // Compute compression level from fill percentage
 function computeLevel(fillPct: number): CompressionLevel {
 	if (fillPct >= 0.85) return "ceiling";
-	if (fillPct >= 0.7) return "ultra";
+	if (fillPct >= 0.75) return "ultra";
 	if (fillPct >= 0.5) return "lean";
 	return "off";
 }
@@ -394,14 +394,14 @@ export function deescalate(sessionID: string): CompressionLevel {
 			fillPct: s.fillPct,
 			timestamp: Date.now(),
 		});
-	} else if (s.fillPct < 0.65 && s.level === "ceiling") {
+	} else if (s.fillPct < 0.8 && s.level === "ceiling") {
 		s.level = "ultra";
 		s.history.push({
 			level: "ultra",
 			fillPct: s.fillPct,
 			timestamp: Date.now(),
 		});
-	} else if (s.fillPct < 0.8 && s.level === "ultra") {
+	} else if (s.fillPct < 0.7 && s.level === "ultra") {
 		s.level = "lean";
 		s.history.push({
 			level: "lean",
