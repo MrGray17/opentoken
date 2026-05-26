@@ -1,0 +1,23 @@
+{
+	"name": "opentoken",
+	"version": "2.0.0",
+	"description": "Universal token-saving pipe tool for AI coding agents",
+	"type": "module",
+	"license": "MIT",
+	"bin": {
+		"opentoken": "./src/cli.ts"
+	},
+	"engines": {
+		"bun": ">=1.2.0"
+	},
+	"files": [
+		"src/**/*.ts"
+	],
+	"dependencies": {
+		"@opentoken/core": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"typescript": "^5.9.3"
+	}
+}

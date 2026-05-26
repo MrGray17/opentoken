@@ -16,6 +16,9 @@ Bugs.md
 # Logs
 *.log
 
+# Local OpenCode mirror (auto-generated from packages/)
+.opencode/
+
 # OS junk
 .DS_Store
 Thumbs.db

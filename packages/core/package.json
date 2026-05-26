@@ -1,0 +1,49 @@
+{
+	"name": "@opentoken/core",
+	"version": "2.0.0",
+	"description": "Universal token-saving core — pure-logic compression pipeline, no platform dependencies",
+	"type": "module",
+	"license": "MIT",
+	"engines": {
+		"bun": ">=1.2.0",
+		"node": ">=18"
+	},
+	"files": [
+		"src/**/*.ts",
+		"!src/**/*.test.ts",
+		"!src/**/*.spec.ts"
+	],
+	"exports": {
+		".": {
+			"import": "./src/index.ts",
+			"default": "./src/index.ts"
+		},
+		"./*": {
+			"import": "./src/*.ts",
+			"default": "./src/*.ts"
+		},
+		"./families/*": {
+			"import": "./src/families/*.ts",
+			"default": "./src/families/*.ts"
+		},
+		"./filters/*": {
+			"import": "./src/filters/*.ts",
+			"default": "./src/filters/*.ts"
+		},
+		"./pipelines/*": {
+			"import": "./src/pipelines/*.ts",
+			"default": "./src/pipelines/*.ts"
+		},
+		"./utils/*": {
+			"import": "./src/utils/*.ts",
+			"default": "./src/utils/*.ts"
+		}
+	},
+	"dependencies": {
+		"@opencode-ai/sdk": "^1.15.5"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"typescript": "^5.9.3"
+	}
+}
