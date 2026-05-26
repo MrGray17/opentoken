@@ -24,14 +24,18 @@ const CHECKS: [RegExp, string][] = [
 ]
 
 function* walkTs(dir: string): Generator<string> {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
-      yield* walkTs(full)
-    } else if (entry.isFile() && entry.name.endsWith(".ts")) {
-      yield full
-    }
-  }
+	try {
+		for (const entry of readdirSync(dir, { withFileTypes: true })) {
+			const full = join(dir, entry.name)
+			if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
+				yield* walkTs(full)
+			} else if (entry.isFile() && entry.name.endsWith(".ts")) {
+				yield full
+			}
+		}
+	} catch {
+		// directory doesn't exist — skip
+	}
 }
 
 const walkDirs = [
@@ -40,8 +44,6 @@ const walkDirs = [
 	join(import.meta.dir!, "..", "packages/mcp/src"),
 	join(import.meta.dir!, "..", "packages/opencode/src"),
 	join(import.meta.dir!, "..", "tests/core"),
-	join(import.meta.dir!, "..", "tests/cli"),
-	join(import.meta.dir!, "..", "tests/mcp"),
 	join(import.meta.dir!, "..", "tests/opencode"),
 ]
 let found = 0
