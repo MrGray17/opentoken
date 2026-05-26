@@ -3,6 +3,7 @@
 // Stores oversized results in temp files, leaves pointer in context
 // Session-keyed to prevent cross-session data leakage
 
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { SessionStore } from "./utils/session-store";
@@ -40,8 +41,7 @@ async function ensureDir(): Promise<void> {
 	try {
 		const dirExists = await Bun.file(OFFLOAD_DIR).exists();
 		if (!dirExists) {
-			const proc = Bun.spawn(["mkdir", "-p", OFFLOAD_DIR]);
-			await proc.exited;
+			fs.mkdirSync(OFFLOAD_DIR, { recursive: true });
 		}
 	} catch {
 		// Ignore
@@ -162,9 +162,8 @@ export async function cleanupOffloaded(
 	for (const [id, entry] of state.store.entries()) {
 		if (now - entry.timestamp > maxAgeMs) {
 			try {
-				if (await Bun.file(entry.filePath).exists()) {
-					const proc = Bun.spawn(["rm", "-f", entry.filePath]);
-					await proc.exited;
+				if (fs.existsSync(entry.filePath)) {
+					fs.unlinkSync(entry.filePath);
 				}
 			} catch {
 				// Ignore

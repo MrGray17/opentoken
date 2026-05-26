@@ -80,7 +80,9 @@ describe("compressOutput", () => {
 	});
 
 	it("strips end-anchored closing (Let me know)", () => {
-		const text = "The answer is 42. Let me know if you have questions. ".repeat(4);
+		const text = "The answer is 42. Let me know if you have questions. ".repeat(
+			4,
+		);
 		const result = compressOutput(text);
 		expect(result.length).toBeLessThan(text.length);
 	});
@@ -143,7 +145,9 @@ describe("compressOutput", () => {
 
 	it("preserves substantive content after stripping boilerplate", () => {
 		const text =
-			"Sure! Here is the answer. The function returns a Promise. Let me know if you need clarification. ".repeat(3);
+			"Sure! Here is the answer. The function returns a Promise. Let me know if you need clarification. ".repeat(
+				3,
+			);
 		const result = compressOutput(text);
 		expect(result).toContain("function returns a Promise");
 	});

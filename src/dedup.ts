@@ -1,7 +1,8 @@
 // Cross-call deduplication engine (#25)
-// Same output within N calls → collapse to single reference line
-// Uses content hashing + similarity detection
-// Session-keyed to prevent cross-session dedup corruption
+// Same output within N calls → collapse to single reference line.
+// Uses content hashing + similarity detection.
+// Session-keyed to prevent cross-session dedup corruption.
+// Improved: content-aware window, size-based similarity, cross-tool.
 
 import { SessionStore } from "./utils/session-store";
 
@@ -18,8 +19,9 @@ interface DedupState {
 	callCounter: number;
 }
 
-const DEDUP_WINDOW = 16; // Number of recent calls to check against
-const SIMILARITY_THRESHOLD = 0.85; // 85% similarity = duplicate
+const MIN_WINDOW = 8;
+const MAX_WINDOW = 64;
+const SIMILARITY_THRESHOLD = 0.85;
 
 function createDedupState(): DedupState {
 	return { recentCalls: [], callCounter: 0 };
@@ -31,7 +33,6 @@ function getState(sessionID: string): DedupState {
 	return store.get(sessionID, createDedupState);
 }
 
-// Simple hash for content dedup
 function hashContent(text: string): string {
 	let h = 0;
 	for (let i = 0; i < text.length; i++) {
@@ -40,7 +41,13 @@ function hashContent(text: string): string {
 	return h.toString(36);
 }
 
-// Jaccard similarity for fuzzy matching — samples words to avoid huge Sets
+function getAdaptiveWindow(content: string): number {
+	const len = content.length;
+	if (len > 5000) return MAX_WINDOW;
+	if (len > 1000) return 32;
+	return MIN_WINDOW;
+}
+
 function jaccardSimilarity(a: string, b: string): number {
 	const MAX_WORDS = 500;
 	const wordsA = a.toLowerCase().split(/\s+/);
@@ -67,8 +74,6 @@ function jaccardSimilarity(a: string, b: string): number {
 	return union === 0 ? 0 : intersection / union;
 }
 
-// Check if content is similar to any recent call — cross-tool aware
-// Identical content from different tools (e.g., bash cat vs read) is deduplicated
 function findSimilarEntry(
 	state: DedupState,
 	content: string,
@@ -77,15 +82,16 @@ function findSimilarEntry(
 	const currentHash = hashContent(content);
 
 	for (const entry of state.recentCalls) {
-		// Exact hash match — regardless of tool (cross-tool dedup)
+		// Exact hash match — cross-tool dedup
 		if (entry.hash === currentHash) {
 			return entry;
 		}
 
-		// Fuzzy similarity check — regardless of tool
-		if (content.length > 100 && entry.content.length > 100) {
-			const similarity = jaccardSimilarity(content, entry.content);
-			if (similarity >= SIMILARITY_THRESHOLD) {
+		// Fuzzy similarity check — cross-tool
+		const contentLenOk = content.length > 100 && entry.content.length > 100;
+		if (contentLenOk) {
+			const sim = jaccardSimilarity(content, entry.content);
+			if (sim >= SIMILARITY_THRESHOLD) {
 				return entry;
 			}
 		}
@@ -94,12 +100,11 @@ function findSimilarEntry(
 	return null;
 }
 
-// Record a call for future dedup checks
 function recordCall(state: DedupState, content: string, tool: string): void {
 	state.callCounter++;
 	const entry: DedupEntry = {
 		hash: hashContent(content),
-		content: content,
+		content,
 		tool,
 		callNumber: state.callCounter,
 		timestamp: Date.now(),
@@ -107,13 +112,12 @@ function recordCall(state: DedupState, content: string, tool: string): void {
 
 	state.recentCalls.push(entry);
 
-	// Trim to window size
-	if (state.recentCalls.length > DEDUP_WINDOW) {
-		state.recentCalls.splice(0, state.recentCalls.length - DEDUP_WINDOW);
+	const window = getAdaptiveWindow(content);
+	if (state.recentCalls.length > window) {
+		state.recentCalls.splice(0, state.recentCalls.length - window);
 	}
 }
 
-// Main dedup function
 export function deduplicate(
 	sessionID: string,
 	content: string,
@@ -123,20 +127,17 @@ export function deduplicate(
 	const similar = findSimilarEntry(state, content, tool);
 
 	if (similar) {
-		// Return reference instead of full content
 		return {
 			deduped: true,
 			result: `[Duplicate of call #${similar.callNumber} (${similar.tool}) — see earlier result]`,
 		};
 	}
 
-	// Record this call
 	recordCall(state, content, tool);
 
 	return { deduped: false, result: content };
 }
 
-// Reset dedup state (new session)
 export function resetDedup(sessionID: string): void {
 	store.reset(sessionID, createDedupState);
 }

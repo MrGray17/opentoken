@@ -3,6 +3,7 @@
 // Replace file reads with symbol lookups. 99.9% reduction on symbol lookups.
 
 import crypto from "node:crypto";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -48,59 +49,62 @@ const SYMBOL_PATTERNS: Record<
 > = {
 	"typescript,tsx,javascript,jsx": {
 		patterns: [
-			{ type: "function", regex: /^(export\s+)?(async\s+)?function\s+(\w+)/ },
-			{ type: "class", regex: /^(export\s+)?(abstract\s+)?class\s+(\w+)/ },
-			{ type: "interface", regex: /^(export\s+)?interface\s+(\w+)/ },
-			{ type: "type", regex: /^(export\s+)?type\s+(\w+)/ },
-			{ type: "enum", regex: /^(export\s+)?enum\s+(\w+)/ },
-			{ type: "const", regex: /^(export\s+)?(const|let|var)\s+(\w+)/ },
-			{ type: "method", regex: /^\s+(async\s+)?(\w+)\s*\(/ },
-			{ type: "import", regex: /^(import\s+[\s\S]*?from\s+['"]([^'"]+)['"])/ },
+			{ type: "function", regex: /^(export\s+)?(async\s+)?function\s+(\w+)/gm },
+			{ type: "class", regex: /^(export\s+)?(abstract\s+)?class\s+(\w+)/gm },
+			{ type: "interface", regex: /^(export\s+)?interface\s+(\w+)/gm },
+			{ type: "type", regex: /^(export\s+)?type\s+(\w+)/gm },
+			{ type: "enum", regex: /^(export\s+)?enum\s+(\w+)/gm },
+			{ type: "const", regex: /^(export\s+)?(const|let|var)\s+(\w+)/gm },
+			{ type: "method", regex: /^\s+(async\s+)?(\w+)\s*\(/gm },
+			{
+				type: "import",
+				regex: /^(import\s+[\s\S]*?from\s+['"]([^'"]+)['"])/gm,
+			},
 		],
 	},
 	"python,py": {
 		patterns: [
-			{ type: "function", regex: /^(async\s+)?def\s+(\w+)/ },
-			{ type: "class", regex: /^class\s+(\w+)/ },
+			{ type: "function", regex: /^(async\s+)?def\s+(\w+)/gm },
+			{ type: "class", regex: /^class\s+(\w+)/gm },
 			{
 				type: "import",
-				regex: /^(import\s+(\w+)|from\s+(\w+(\.\w+)*)\s+import)/,
+				regex: /^(import\s+(\w+)|from\s+(\w+(\.\w+)*)\s+import)/gm,
 			},
-			{ type: "const", regex: /^(\w+)\s*=\s*/ },
+			{ type: "const", regex: /^(\w+)\s*=\s*/gm },
 		],
 	},
 	"rust,rs": {
 		patterns: [
-			{ type: "function", regex: /^(pub\s+)?(async\s+)?fn\s+(\w+)/ },
-			{ type: "class", regex: /^(pub\s+)?struct\s+(\w+)/ },
-			{ type: "interface", regex: /^(pub\s+)?trait\s+(\w+)/ },
-			{ type: "enum", regex: /^(pub\s+)?enum\s+(\w+)/ },
-			{ type: "type", regex: /^(pub\s+)?type\s+(\w+)/ },
-			{ type: "const", regex: /^(pub\s+)?(const|static)\s+(\w+)/ },
-			{ type: "method", regex: /^\s+(pub\s+)?(async\s+)?fn\s+(\w+)/ },
-			{ type: "import", regex: /^(use\s+([\s\S]*?);)/ },
+			{ type: "function", regex: /^(pub\s+)?(async\s+)?fn\s+(\w+)/gm },
+			{ type: "class", regex: /^(pub\s+)?struct\s+(\w+)/gm },
+			{ type: "interface", regex: /^(pub\s+)?trait\s+(\w+)/gm },
+			{ type: "enum", regex: /^(pub\s+)?enum\s+(\w+)/gm },
+			{ type: "type", regex: /^(pub\s+)?type\s+(\w+)/gm },
+			{ type: "const", regex: /^(pub\s+)?(const|static)\s+(\w+)/gm },
+			{ type: "method", regex: /^\s+(pub\s+)?(async\s+)?fn\s+(\w+)/gm },
+			{ type: "import", regex: /^(use\s+([\s\S]*?);)/gm },
 		],
 	},
 	go: {
 		patterns: [
-			{ type: "function", regex: /^func\s+(\w+)/ },
-			{ type: "class", regex: /^type\s+(\w+)\s+struct/ },
-			{ type: "interface", regex: /^type\s+(\w+)\s+interface/ },
-			{ type: "type", regex: /^type\s+(\w+)/ },
-			{ type: "const", regex: /^(const|var)\s+(\w+)/ },
-			{ type: "method", regex: /^func\s+\(\w+\s+\*?\w+\)\s+(\w+)/ },
-			{ type: "import", regex: /^import\s+\(/ },
+			{ type: "function", regex: /^func\s+(\w+)/gm },
+			{ type: "class", regex: /^type\s+(\w+)\s+struct/gm },
+			{ type: "interface", regex: /^type\s+(\w+)\s+interface/gm },
+			{ type: "type", regex: /^type\s+(\w+)/gm },
+			{ type: "const", regex: /^(const|var)\s+(\w+)/gm },
+			{ type: "method", regex: /^func\s+\(\w+\s+\*?\w+\)\s+(\w+)/gm },
+			{ type: "import", regex: /^import\s+\(/gm },
 		],
 	},
 	java: {
 		patterns: [
 			{
 				type: "class",
-				regex: /^(public|private|protected)?\s*(abstract\s+)?class\s+(\w+)/,
+				regex: /^(public|private|protected)?\s*(abstract\s+)?class\s+(\w+)/gm,
 			},
 			{
 				type: "interface",
-				regex: /^(public|private|protected)?\s*interface\s+(\w+)/,
+				regex: /^(public|private|protected)?\s*interface\s+(\w+)/gm,
 			},
 			{
 				type: "method",
@@ -112,7 +116,7 @@ const SYMBOL_PATTERNS: Record<
 				regex:
 					/^(public|private|protected)?\s*(static\s+)?[\w<>[\]]+\s+(\w+)\s*;/,
 			},
-			{ type: "import", regex: /^import\s+([\s\S]*?);/ },
+			{ type: "import", regex: /^import\s+([\s\S]*?);/gm },
 		],
 	},
 };
@@ -342,13 +346,11 @@ export async function loadIndex(): Promise<boolean> {
 
 async function ensureDir(): Promise<void> {
 	try {
-		const dirExists = await Bun.file(INDEX_DIR).exists();
-		if (!dirExists) {
-			const proc = Bun.spawn(["mkdir", "-p", INDEX_DIR]);
-			await proc.exited;
+		if (!fs.existsSync(INDEX_DIR)) {
+			fs.mkdirSync(INDEX_DIR, { recursive: true });
 		}
 	} catch {
-		// Ignore
+		/* fs */
 	}
 }
 

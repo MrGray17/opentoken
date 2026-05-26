@@ -180,18 +180,12 @@ download_and_verify() {
   tar xzf "$archive" -C "$TMPDIR" --strip-components=1 2>/dev/null
 }
 
-# Try tag first, fall back to main branch
+# Try tag, error if not found
 if ! download_and_verify "$TAG_URL" "tag v${OPENTOKEN_VERSION}" "$EXPECTED_SHA256"; then
-  echo "  Tag v${OPENTOKEN_VERSION} not found (404)."
-  echo "  Falling back to main branch..."
-  if ! download_and_verify "$MAIN_URL" "main branch" ""; then
-    echo "ERROR: Failed to download OpenToken from both tag and main branch."
-    echo "Check your internet connection or visit:"
-    echo "  https://github.com/MrGray17/opentoken"
-    exit 1
-  fi
-  echo "  WARNING: Installed from main branch (unversioned)."
-  echo "           Run with OPENTOKEN_VERSION=<tag> for reproducible installs."
+  echo "ERROR: Tag v${OPENTOKEN_VERSION} not found (404)."
+  echo "Specify a valid tag via OPENTOKEN_VERSION=<tag> or check:"
+  echo "  https://github.com/MrGray17/opentoken/releases"
+  exit 1
 fi
 
 # ── Copy sources ───────────────────────────────────────

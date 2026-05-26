@@ -20,7 +20,8 @@
     "compression"
   ],
   "engines": {
-    "bun": ">=1.2.0"
+    "bun": ">=1.2.0",
+    "node": ">=18"
   },
   "publishConfig": {
     "access": "public"
@@ -31,7 +32,6 @@
     "!src/**/*.test.ts",
     "!src/**/*.spec.ts",
     "README.md",
-    "CHANGELOG.md",
     "LICENSE"
   ],
   "exports": {
@@ -49,14 +49,14 @@
     "typecheck": "tsc --noEmit",
     "checks:regex": "bun run scripts/check-regex-safety.ts",
     "lint": "biome check src/",
-    "lint:fix": "biome check --apply src/",
-    "format": "biome format --write src/"
+    "lint:fix": "biome check --write src/",
+    "bench": "bun run tests/benchmark.test.ts",
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.15.5",
     "@opentui/solid": "^0.2.14",
     "@opentui/core": "^0.2.14",
-    "solid-js": "^1.9.13"
+    "solid-js": "1.9.12"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",

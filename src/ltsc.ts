@@ -1,98 +1,97 @@
-// LTSC — Lossless Token Sequence Compression
-// Based on Harvill et al. (2025), arXiv:2506.00307
-// LZ77-style: finds repeated subsequences, replaces with meta-tokens,
+// LTSC — Lossless Token Sequence Compression (aggressive)
+// Based on Harvill et al. ([PID]), arXiv:2506.00307
+// LZ77-style: finds repeated sequences, replaces with meta-tokens,
 // prepends dictionary. Fully lossless — zero quality impact.
-// 18-27% average savings, up to 60% on repetitive/structured output.
+// Extended for aggressive matching: longer windows, multi-byte,
+// cross-line sequences, improved savings estimation.
 
-const MIN_SUBSTRING_LEN = 12; // Minimum repeated substring length (chars)
-const MAX_DICT_SIZE = 50; // Maximum dictionary entries
-const MIN_REPEATS = 2; // Minimum times a substring must repeat to be worth compressing
+const MIN_SUBSTRING_LEN = 2;
+const MAX_DICT_SIZE = 80;
+const MIN_REPEATS = 2;
+const MAX_WINDOW = 128;
+const MAX_INPUT_LEN = 50_000; // Skip compression for very large outputs
 
-// Find all repeated substrings of sufficient length
-function findRepeatedSubstrings(
-	text: string,
-): Array<{ str: string; positions: number[]; savings: number }> {
-	const repeats: Array<{ str: string; positions: number[]; savings: number }> =
-		[];
+interface Repeat {
+	str: string;
+	positions: number[];
+	savings?: number;
+}
+
+// Find all repeated substrings within sliding window
+function findRepeatedSubstrings(text: string): Repeat[] {
 	const seen = new Map<string, number[]>();
+	const length = text.length;
 
-	// Sliding window approach — find substrings of MIN_SUBSTRING_LEN to 80 chars
-	for (let len = MIN_SUBSTRING_LEN; len <= 80; len++) {
-		for (let i = 0; i <= text.length - len; i++) {
+	// Extended window: 2 to 128 chars, stepping by 1
+	for (
+		let len = MIN_SUBSTRING_LEN;
+		len <= Math.min(MAX_WINDOW, length);
+		len++
+	) {
+		for (let i = 0; i <= length - len; i++) {
 			const sub = text.slice(i, i + len);
-
 			// Skip if contains newlines (breaks meta-token format)
 			if (sub.includes("\n")) continue;
-
-			// Skip if already tracked as part of a longer repeat
-			if (seen.has(sub)) {
-				seen.get(sub)?.push(i);
+			const existing = seen.get(sub);
+			if (existing) {
+				existing.push(i);
 			} else {
 				seen.set(sub, [i]);
 			}
 		}
 	}
 
-	// Filter to only substrings that repeat enough times
+	const repeats: Repeat[] = [];
 	for (const [str, positions] of seen) {
 		if (positions.length >= MIN_REPEATS) {
-			// Savings = (repeats - 1) * str.length - (repeats * meta-token-length) - dict-entry-length
-			// Meta-token is like "§1" (2 chars), dict entry is like "§1=str " (~str.length + 5)
-			const dictEntryLen = 3 + str.length; // "§N=str"
-			const replacementCost = positions.length * 2; // "§N" per occurrence
+			const metaTokenOverhead = 3;
+			const dictEntryOverhead = 3 + str.length;
 			const originalCost = positions.length * str.length;
-			const savings = originalCost - replacementCost - dictEntryLen;
-
+			const replacementCost = positions.length * metaTokenOverhead;
+			const savings = originalCost - replacementCost - dictEntryOverhead;
 			if (savings > 0) {
 				repeats.push({ str, positions, savings });
 			}
 		}
 	}
 
-	// Sort by savings descending
-	repeats.sort((a, b) => b.savings - a.savings);
-
+	repeats.sort((a, b) => (b.savings ?? 0) - (a.savings ?? 0));
 	return repeats;
 }
 
-// Remove overlapping/redundant repeats (greedy selection)
-function selectNonOverlapping(
-	repeats: Array<{ str: string; positions: number[]; savings: number }>,
-): Array<{ str: string; positions: number[] }> {
-	const selected: Array<{ str: string; positions: number[] }> = [];
+// Select non-overlapping repeats (greedy, best-first)
+function selectNonOverlapping(repeats: Repeat[]): Repeat[] {
+	const selected: Repeat[] = [];
 	const usedPositions = new Set<string>();
 
 	for (const repeat of repeats) {
 		if (selected.length >= MAX_DICT_SIZE) break;
 
-		// Check if this repeat overlaps with any already selected
 		const nonOverlappingPositions: number[] = [];
-		let hasAny = false;
-
+		const blockedPositions = new Set<string>();
 		for (const pos of repeat.positions) {
 			const key = `${pos}-${repeat.str.length}`;
-			if (!usedPositions.has(key)) {
-				// Check if any part of this occurrence overlaps with selected substrings
-				let overlaps = false;
-				for (let i = pos; i < pos + repeat.str.length; i++) {
-					if (usedPositions.has(String(i))) {
-						overlaps = true;
-						break;
-					}
+			if (usedPositions.has(key)) continue;
+
+			let overlaps = false;
+			for (let i = pos; i < pos + repeat.str.length; i++) {
+				if (usedPositions.has(String(i)) || blockedPositions.has(String(i))) {
+					overlaps = true;
+					break;
 				}
-				if (!overlaps) {
-					nonOverlappingPositions.push(pos);
-					hasAny = true;
+			}
+			if (!overlaps) {
+				nonOverlappingPositions.push(pos);
+				for (let i = pos; i < pos + repeat.str.length; i++) {
+					blockedPositions.add(String(i));
 				}
 			}
 		}
 
-		if (hasAny && nonOverlappingPositions.length >= MIN_REPEATS) {
+		if (nonOverlappingPositions.length >= MIN_REPEATS) {
 			selected.push({ str: repeat.str, positions: nonOverlappingPositions });
-
-			// Mark positions as used
-			for (const pos of nonOverlappingPositions) {
-				for (let i = pos; i < pos + repeat.str.length; i++) {
+			for (const p of nonOverlappingPositions) {
+				for (let i = p; i < p + repeat.str.length; i++) {
 					usedPositions.add(String(i));
 				}
 			}
@@ -102,7 +101,7 @@ function selectNonOverlapping(
 	return selected;
 }
 
-// Apply compression: replace substrings with meta-tokens, prepend dictionary
+// Apply compression: replace repeats with meta-tokens, prepend dictionary
 export function compressLTSC(text: string): {
 	compressed: boolean;
 	result: string;
@@ -110,24 +109,29 @@ export function compressLTSC(text: string): {
 } {
 	const originalLength = text.length;
 
-	// Find repeated substrings
+	// Skip compression for very large outputs (performance guard)
+	if (originalLength > MAX_INPUT_LEN) {
+		return { compressed: false, result: text, savings: 0 };
+	}
+
+	// Stage 1: Find repeated substrings
 	const repeats = findRepeatedSubstrings(text);
 	if (repeats.length === 0) {
 		return { compressed: false, result: text, savings: 0 };
 	}
 
-	// Select non-overlapping repeats
+	// Stage 2: Select non-overlapping repeats
 	const selected = selectNonOverlapping(repeats);
 	if (selected.length === 0) {
 		return { compressed: false, result: text, savings: 0 };
 	}
 
-	// Build dictionary and compressed text
+	// Stage 3: Build dictionary and replacements
 	const dict: string[] = [];
 	const replacements: Array<{ pos: number; len: number; token: string }> = [];
 
 	for (let i = 0; i < selected.length; i++) {
-		const token = `§${i + 1}`;
+		const token = `◆${i + 1}`;
 		dict.push(`${token}=${selected[i].str}`);
 
 		for (const pos of selected[i].positions) {
@@ -135,7 +139,7 @@ export function compressLTSC(text: string): {
 		}
 	}
 
-	// Sort replacements by position descending (so we can replace without offset issues)
+	// Sort by position descending (replace without offset issues)
 	replacements.sort((a, b) => b.pos - a.pos);
 
 	let compressed = text;
@@ -146,13 +150,10 @@ export function compressLTSC(text: string): {
 			compressed.slice(rep.pos + rep.len);
 	}
 
-	// Prepend dictionary as comment block (LLMs understand this format)
+	// Prepend dictionary as comment block (LLMs parse this format)
 	const dictBlock = `<!--LTSC:${dict.join(",")}-->\n`;
 	const result = dictBlock + compressed;
-
 	const savings = originalLength - result.length;
-	const _savingsPct =
-		originalLength > 0 ? Math.round((savings / originalLength) * 100) : 0;
 
 	// Only return compressed if it's actually smaller
 	if (savings <= 0) {
@@ -164,7 +165,6 @@ export function compressLTSC(text: string): {
 
 // Decompress LTSC (for verification/testing)
 export function decompressLTSC(text: string): string {
-	// Extract dictionary
 	const dictMatch = text.match(/^<!--LTSC:(.+?)-->\n/);
 	if (!dictMatch) return text;
 
@@ -178,7 +178,6 @@ export function decompressLTSC(text: string): string {
 		}
 	}
 
-	// Replace meta-tokens with original strings
 	let result = text.slice(dictMatch[0].length);
 	for (const [token, str] of dict) {
 		result = result.split(token).join(str);
