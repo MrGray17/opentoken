@@ -5,7 +5,6 @@ set -euo pipefail
 OPENTOKEN_VERSION="${OPENTOKEN_VERSION:-1.2.0}"
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opentoken"
 PLUGIN_FILE="${HOME}/.config/opencode/plugins/opentoken.ts"
-TUI_FILE="${HOME}/.config/opencode/plugins/opentoken-tui.tsx"
 TUI_CONFIG="${HOME}/.config/opencode/tui.json"
 TAG_URL="https://github.com/MrGray17/opentoken/archive/refs/tags/v${OPENTOKEN_VERSION}.tar.gz"
 MAIN_URL="https://github.com/MrGray17/opentoken/archive/refs/heads/main.tar.gz"
@@ -56,12 +55,6 @@ uninstall() {
     removed=true
   fi
 
-  if [ -f "$TUI_FILE" ]; then
-    rm -f "$TUI_FILE"
-    echo "  Removed $TUI_FILE"
-    removed=true
-  fi
-
   if [ -f "$TUI_CONFIG" ]; then
     local tmp
     tmp=$(mktemp)
@@ -73,7 +66,7 @@ uninstall() {
           cfg.plugin = cfg.plugin.filter(p => !p.includes('opentoken'));
         }
         fs.writeFileSync('$TUI_CONFIG', JSON.stringify(cfg, null, 2) + '\n');
-      " 2>/dev/null && echo "  Removed opentoken-tui from $TUI_CONFIG" && removed=true
+      " 2>/dev/null && echo "  Removed opentoken from $TUI_CONFIG" && removed=true
     elif command -v node &>/dev/null; then
       node -e "
         const fs = require('fs');
@@ -82,7 +75,7 @@ uninstall() {
           cfg.plugin = cfg.plugin.filter(p => !p.includes('opentoken'));
         }
         fs.writeFileSync('$TUI_CONFIG', JSON.stringify(cfg, null, 2) + '\n');
-      " 2>/dev/null && echo "  Removed opentoken-tui from $TUI_CONFIG" && removed=true
+      " 2>/dev/null && echo "  Removed opentoken from $TUI_CONFIG" && removed=true
     fi
     rm -f "$tmp"
   fi
@@ -120,7 +113,7 @@ while [ $# -gt 0 ]; do
 done
 
 # ── Confirmation ───────────────────────────────────────
-if [ -d "$PLUGIN_DIR" ] || [ -f "$PLUGIN_FILE" ] || [ -f "$TUI_FILE" ]; then
+if [ -d "$PLUGIN_DIR" ] || [ -f "$PLUGIN_FILE" ]; then
   if [ "$SKIP_CONFIRM" = false ]; then
     echo "OpenToken is already installed. Overwrite? [y/N] "
     read -r confirm </dev/tty
@@ -140,9 +133,6 @@ if [ -d "$PLUGIN_DIR" ]; then
 fi
 if [ -f "$PLUGIN_FILE" ]; then
   rm -f "$PLUGIN_FILE"
-fi
-if [ -f "$TUI_FILE" ]; then
-  rm -f "$TUI_FILE"
 fi
 
 mkdir -p "$PLUGIN_DIR"
@@ -196,11 +186,6 @@ cp "$PLUGIN_DIR/index.ts" "$PLUGIN_FILE"
 sed -i 's|from "./opentoken/opentoken/|from "./opentoken/|g' "$PLUGIN_FILE"
 sed -i 's|from "./|from "./opentoken/|g' "$PLUGIN_FILE"
 
-# TUI entry point
-cp "$PLUGIN_DIR/tui.tsx" "$TUI_FILE"
-sed -i 's|from "./opentoken/opentoken/|from "./opentoken/|g' "$TUI_FILE"
-sed -i 's|from "./|from "./opentoken/|g' "$TUI_FILE"
-
 # ── Dependency manifest (informational) ─────────────────
 cat > "$PLUGIN_DIR/package.json" << 'EOF'
 {
@@ -226,14 +211,14 @@ cd - > /dev/null
 
 # ── TUI plugin registration ────────────────────────────
 if [ -f "$TUI_CONFIG" ]; then
-  if ! grep -q "opentoken-tui" "$TUI_CONFIG"; then
+  if ! grep -q "mrgray17/opentoken" "$TUI_CONFIG"; then
     if command -v bun &>/dev/null; then
       bun -e "
         const fs = require('fs');
         const cfg = JSON.parse(fs.readFileSync('$TUI_CONFIG', 'utf8'));
         if (!cfg.plugin) cfg.plugin = [];
-        if (!cfg.plugin.includes('./plugins/opentoken-tui.tsx')) {
-          cfg.plugin.push('./plugins/opentoken-tui.tsx');
+        if (!cfg.plugin.includes('@mrgray17/opentoken@latest')) {
+          cfg.plugin.push('@mrgray17/opentoken@latest');
         }
         fs.writeFileSync('$TUI_CONFIG', JSON.stringify(cfg, null, 2) + '\n');
       "
@@ -242,8 +227,8 @@ if [ -f "$TUI_CONFIG" ]; then
         const fs = require('fs');
         const cfg = JSON.parse(fs.readFileSync('$TUI_CONFIG', 'utf8'));
         if (!cfg.plugin) cfg.plugin = [];
-        if (!cfg.plugin.includes('./plugins/opentoken-tui.tsx')) {
-          cfg.plugin.push('./plugins/opentoken-tui.tsx');
+        if (!cfg.plugin.includes('@mrgray17/opentoken@latest')) {
+          cfg.plugin.push('@mrgray17/opentoken@latest');
         }
         fs.writeFileSync('$TUI_CONFIG', JSON.stringify(cfg, null, 2) + '\n');
       "
@@ -253,12 +238,11 @@ else
   cat > "$TUI_CONFIG" << 'EOF'
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["./plugins/opentoken-tui.tsx"]
+  "plugin": ["@mrgray17/opentoken@latest"]
 }
 EOF
 fi
 
 echo "OpenToken v${OPENTOKEN_VERSION} installed to $PLUGIN_DIR"
 echo "Server entry point: $PLUGIN_FILE"
-echo "TUI entry point: $TUI_FILE"
 echo "Restart opencode to activate."
