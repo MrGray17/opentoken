@@ -467,9 +467,12 @@ describe("Error Logging", () => {
 	});
 });
 
+const METRICS_FILE = path.join(os.homedir(), ".config", "opentoken", "metrics.jsonl");
+
 describe("Autotune — Metrics-Driven Gating", () => {
 	beforeEach(() => {
 		resetCache();
+		try { if (fs.existsSync(METRICS_FILE)) fs.unlinkSync(METRICS_FILE); } catch {}
 	});
 
 	it("returns 1.0 when no metrics file exists", () => {
