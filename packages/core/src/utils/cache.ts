@@ -1,7 +1,3 @@
-// Read cache — skip disk read if same file was read within TTL
-// Uses mtime + size as cache key
-// Session-keyed to prevent cross-session cache pollution
-
 import fs from "node:fs";
 import { SessionStore } from "./session-store";
 
@@ -12,21 +8,22 @@ interface CacheEntry {
 	ts: number;
 }
 
-const TTL_MS = 30_000; // 30 seconds
-const MAX_CACHE_SIZE = 500; // LRU cap — evict oldest when exceeded
+const TTL_MS = 30_000;
+const MAX_CACHE_SIZE = 500;
+const MTIME_TOLERANCE_MS = 5000;
 
 interface CacheState {
 	cache: Map<string, CacheEntry>;
 }
 
-function createCacheState(): CacheState {
+function createState(): CacheState {
 	return { cache: new Map() };
 }
 
 const store = new SessionStore<CacheState>();
 
 function getState(sessionID: string): CacheState {
-	return store.get(sessionID, createCacheState);
+	return store.get(sessionID, createState);
 }
 
 function makeKey(filePath: string): string {
@@ -47,14 +44,18 @@ export function getCachedRead(
 		return null;
 	}
 
-	// Verify file hasn't changed (use tolerance for floating point mtime)
 	try {
 		const stat = fs.statSync(filePath);
-		if (Math.abs(stat.mtimeMs - entry.mtime) < 1 && stat.size === entry.size) {
+		if (
+			Math.abs(stat.mtimeMs - entry.mtime) <= MTIME_TOLERANCE_MS &&
+			stat.size === entry.size
+		) {
 			return entry.content;
 		}
-	} catch {
-		// File gone or inaccessible
+	} catch (e) {
+		if (e instanceof Error && (e as NodeJS.ErrnoException).code !== "ENOENT") {
+			throw e;
+		}
 	}
 
 	state.cache.delete(makeKey(filePath));
@@ -69,7 +70,6 @@ export function setCachedRead(
 	try {
 		const state = getState(sessionID);
 		const stat = fs.statSync(filePath);
-		// LRU eviction: remove oldest entry when cache is full
 		if (state.cache.size >= MAX_CACHE_SIZE) {
 			const oldestKey = state.cache.keys().next().value;
 			if (oldestKey) state.cache.delete(oldestKey);
@@ -80,7 +80,9 @@ export function setCachedRead(
 			size: stat.size,
 			ts: Date.now(),
 		});
-	} catch {
-		// Can't stat, don't cache
+	} catch (e) {
+		if (e instanceof Error && (e as NodeJS.ErrnoException).code !== "ENOENT") {
+			throw e;
+		}
 	}
 }
