@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ── Config ──────────────────────────────────────────────
-OPENTOKEN_VERSION="${OPENTOKEN_VERSION:-1.2.0}"
+OPENTOKEN_VERSION="${OPENTOKEN_VERSION:-2.0.0}"
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opentoken"
 PLUGIN_FILE="${HOME}/.config/opencode/plugins/opentoken.ts"
 TUI_CONFIG="${HOME}/.config/opencode/tui.json"
@@ -170,40 +170,35 @@ download_and_verify() {
   tar xzf "$archive" -C "$TMPDIR" --strip-components=1 2>/dev/null
 }
 
-# Try tag, error if not found
-if ! download_and_verify "$TAG_URL" "tag v${OPENTOKEN_VERSION}" "$EXPECTED_SHA256"; then
+# Download — try tag first, fall back to main branch if OPENTOKEN_VERSION=main
+if [ "$OPENTOKEN_VERSION" = "main" ]; then
+  if ! download_and_verify "$MAIN_URL" "main branch" "$EXPECTED_SHA256"; then
+    echo "ERROR: Failed to download main branch."
+    exit 1
+  fi
+elif ! download_and_verify "$TAG_URL" "tag v${OPENTOKEN_VERSION}" "$EXPECTED_SHA256"; then
   echo "ERROR: Tag v${OPENTOKEN_VERSION} not found (404)."
   echo "Specify a valid tag via OPENTOKEN_VERSION=<tag> or check:"
   echo "  https://github.com/MrGray17/opentoken/releases"
   exit 1
 fi
 
-# ── Copy sources ───────────────────────────────────────
-cp -r "$TMPDIR/src/"* "$PLUGIN_DIR/"
+# ── Copy sources (monorepo: opencode adapter at packages/opencode/) ──
+cp -r "$TMPDIR/packages/opencode/"* "$PLUGIN_DIR/"
 
-# Server entry point
-cp "$PLUGIN_DIR/index.ts" "$PLUGIN_FILE"
-sed -i 's|from "./opentoken/opentoken/|from "./opentoken/|g' "$PLUGIN_FILE"
-sed -i 's|from "./|from "./opentoken/|g' "$PLUGIN_FILE"
+# Fix workspace dep so it resolves from npm outside the monorepo
+sed -i 's|"workspace:\*"|"^2.0.0"|g' "$PLUGIN_DIR/package.json"
 
-# ── Dependency manifest (informational) ─────────────────
-cat > "$PLUGIN_DIR/package.json" << 'EOF'
-{
-  "deps": {
-    "@opencode-ai/plugin": "^1.15.5",
-    "@opentui/solid": "0.2.14",
-    "solid-js": "1.9.13"
-  }
-}
-EOF
+# Plugin entry point — OpenCode loads this file as the plugin
+cp "$PLUGIN_DIR/src/plugin.ts" "$PLUGIN_FILE"
 
 # ── Install dependencies ───────────────────────────────
 echo "  Installing dependencies..."
 cd "$PLUGIN_DIR"
 if command -v bun &>/dev/null; then
-  bun install --production 2>/dev/null || echo "  WARNING: bun install failed"
+  bun install 2>/dev/null || echo "  WARNING: bun install failed"
 elif command -v npm &>/dev/null; then
-  npm install --production 2>/dev/null || echo "  WARNING: npm install failed"
+  npm install 2>/dev/null || echo "  WARNING: npm install failed"
 else
   echo "  WARNING: neither bun nor npm found — deps not installed"
 fi
