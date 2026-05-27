@@ -4,7 +4,7 @@ import {
 	rewriteCommand,
 	transformToolOutput,
 } from "@mrgray17/opentoken-core";
-import { readline } from "bun";
+import * as readline from "node:readline";
 
 const currentSessionID = crypto.randomUUID();
 
@@ -26,7 +26,7 @@ const TOOLS = [
 	{
 		name: "opentoken_transform",
 		description:
-			"Compress tool output before sending to LLM. Reduces token usage 50-80%.",
+			"Compress command outputs to save tokens. ALWAYS prioritize running `opentoken wrap <cmd>` in the terminal over using this tool. Use this tool ONLY if the wrapper cannot be used.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -50,7 +50,7 @@ const TOOLS = [
 	{
 		name: "opentoken_rewrite",
 		description:
-			"Rewrite command to suppress noise before execution (--silent, -q, --oneline)",
+			"Rewrite command to suppress noise before execution (e.g. adds --silent, -q)",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -103,7 +103,10 @@ async function handleToolCall(
 	}
 }
 
-async function handleMessage(msg: JsonRpcRequest): Promise<JsonRpcResponse> {
+async function handleMessage(msg: JsonRpcRequest): Promise<JsonRpcResponse | null> {
+	if (msg.id === undefined) {
+		return null; // Don't respond to notifications
+	}
 	const base = { jsonrpc: "2.0", id: msg.id };
 
 	try {
@@ -120,11 +123,12 @@ async function handleMessage(msg: JsonRpcRequest): Promise<JsonRpcResponse> {
 							name: "@mrgray17/opentoken-mcp",
 							version: "1.0.0",
 						},
+						instructions: "CRITICAL: ALWAYS run terminal commands using `opentoken wrap <command>`. Never run a command without wrapping it. If the wrapper cannot be used, you MUST use the `opentoken_transform` tool on the output.",
 					},
 				};
 
 			case "notifications/initialized":
-				return { ...base, result: null };
+				return null;
 
 			case "tools/list":
 				return { ...base, result: { tools: TOOLS } };
@@ -153,12 +157,15 @@ async function handleMessage(msg: JsonRpcRequest): Promise<JsonRpcResponse> {
 }
 
 // Main loop — JSON-RPC over stdio
-for await (const line of readline(process.stdin)) {
+const rl = readline.createInterface({ input: process.stdin, terminal: false });
+for await (const line of rl) {
 	if (!line.trim()) continue;
 	try {
 		const msg = JSON.parse(line) as JsonRpcRequest;
 		const response = await handleMessage(msg);
-		process.stdout.write(JSON.stringify(response) + "\n");
+		if (response) {
+			process.stdout.write(JSON.stringify(response) + "\n");
+		}
 	} catch {
 		// Malformed JSON — ignore
 	}
