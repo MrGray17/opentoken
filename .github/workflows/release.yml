@@ -31,36 +31,33 @@ jobs:
           bun-version: latest
       - run: bun install
 
-      # Helper: replace workspace:* deps with real versions, then npm publish
+      - name: Setup npm auth
+        run: echo "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}" > ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # @opentoken/core has no workspace:* deps — publish directly
       - name: Publish @opentoken/core
         run: npm publish --provenance --access public
         working-directory: packages/core
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish opentoken CLI
         run: |
           sed -i 's|"workspace:\*"|"^2.0.0"|g' package.json
           npm publish --provenance --access public
         working-directory: packages/cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @opentoken/mcp
         run: |
           sed -i 's|"workspace:\*"|"^2.0.0"|g' package.json
           npm publish --provenance --access public
         working-directory: packages/mcp
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @mrgray17/opentoken
         run: |
           sed -i 's|"workspace:\*"|"^2.0.0"|g' package.json
           npm publish --provenance --access public
         working-directory: packages/opencode
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
