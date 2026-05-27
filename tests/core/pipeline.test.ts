@@ -468,7 +468,7 @@ describe("Error Logging", () => {
 });
 
 describe("Autotune — Metrics-Driven Gating", () => {
-	afterEach(() => {
+	beforeEach(() => {
 		resetCache();
 	});
 

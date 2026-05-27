@@ -1,21 +1,5 @@
-import { describe, expect, it } from "bun:test";
-import { loadConfig, validateConfig } from "@opentoken/core/config";
-
-const DEFAULT_CONFIG = {
-	maxOutputBytes: 10 * 1024 * 1024,
-	maxProcessingMs: 5000,
-	safeReadRoot: "",
-	enableMetrics: true,
-	enableSymbolIndex: true,
-	conservativeUseTokens: false,
-	enableHistoryCompression: true,
-	historyCompressionWindow: 4,
-	enableSessionMemory: false,
-	enableTui: true,
-	tuiUseEmoji: true,
-	allowLockFileReads: false,
-	enableOutputSaving: true,
-};
+import { afterAll, describe, expect, it } from "bun:test";
+import { config, DEFAULT_CONFIG, loadConfig, validateConfig } from "@opentoken/core/config";
 
 describe("validateConfig", () => {
 	it("returns defaults for empty input", () => {
@@ -125,6 +109,13 @@ describe("validateConfig", () => {
 });
 
 describe("loadConfig", () => {
+	const savedConfig = { ...config };
+
+	afterAll(() => {
+		// Restore global config to prevent cross-test pollution
+		Object.assign(config, savedConfig);
+	});
+
 	it("loads config from file when exists", async () => {
 		await loadConfig("/tmp");
 		expect(true).toBe(true);
