@@ -12,8 +12,8 @@
 </p>
 
 [![npm](https://img.shields.io/npm/v/@mrgray17/opentoken?color=0366d6&label=opencode)](https://www.npmjs.com/package/@mrgray17/opentoken)
-[![npm](https://img.shields.io/npm/v/opentoken?color=f97316&label=cli)](https://www.npmjs.com/package/opentoken)
-[![npm](https://img.shields.io/npm/v/@opentoken/core?color=8b5cf6&label=core)](https://www.npmjs.com/package/@opentoken/core)
+[![npm](https://img.shields.io/npm/v/@mrgray17/opentoken-cli?color=f97316&label=cli)](https://www.npmjs.com/package/@mrgray17/opentoken-cli)
+[![npm](https://img.shields.io/npm/v/@mrgray17/opentoken-core?color=8b5cf6&label=core)](https://www.npmjs.com/package/@mrgray17/opentoken-core)
 [![CI](https://img.shields.io/badge/tests-431%20pass-22c55e)](https://github.com/MrGray17/opentoken/actions)
 [![Bun](https://img.shields.io/badge/bun-≥1.2.0-fbb744)](https://bun.sh)
 [![license](https://img.shields.io/badge/license-MIT-334155)](LICENSE)
@@ -30,20 +30,20 @@
 
 ```bash
 # CLI — works in any terminal, any shell, any AI tool
-npm install -g opentoken
+npm install -g @mrgray17/opentoken-cli
 
 # or on-demand, no install
-bun x opentoken wrap git diff HEAD~1
+bun x @mrgray17/opentoken-cli wrap git diff HEAD~1
 ```
 
 ```bash
 # MCP server — for Claude Code, Cursor, Windsurf, etc.
-bun install -g @opentoken/mcp
+bun install -g @mrgray17/opentoken-mcp
 ```
 
 ```bash
 # Library — build your own compression pipeline
-npm install @opentoken/core
+npm install @mrgray17/opentoken-core
 ```
 
 **Bun v1.2+ required.** [Install Bun](https://bun.sh) — one command, 2 seconds.
@@ -175,13 +175,13 @@ expensive scan on non-compressible input:
 
 ```
 packages/
-├── core/            @opentoken/core    51 pure-logic modules
+├── core/            @mrgray17/opentoken-core    51 pure-logic modules
 │   ├── families/    10 family filters  (git, npm, cargo, docker, ...)
 │   ├── filters/     3 tool filters     (read, grep, glob)
 │   ├── pipelines/   4 tool pipelines   (bash, read, grep, glob)
 │   └── utils/       9 utilities        (secrets, cache, metrics, ...)
-├── cli/             opentoken          CLI binary — pipe, wrap, stats
-├── mcp/             @opentoken/mcp     MCP server — JSON-RPC over stdio
+├── cli/             @mrgray17/opentoken-cli          CLI binary — pipe, wrap, stats
+├── mcp/             @mrgray17/opentoken-mcp     MCP server — JSON-RPC over stdio
 └── opencode/        @mrgray17/opentoken  OpenCode plugin — 10 hooks
 ```
 
@@ -193,14 +193,14 @@ OpenCode plugin.
 
 ```
                      ┌─────────────────┐
-                     │  @opentoken/core │
+                     │  @mrgray17/opentoken-core │
                      │  51 modules      │
                      │  Pure logic       │
                      └───────┬─────────┘
                              │
         ┌────────────────────┼────────────────────┐
         ▼                    ▼                    ▼
-  opentoken CLI        opentoken-mcp       @mrgray17/opentoken
+  @mrgray17/opentoken-cli        @mrgray17/opentoken-mcp       @mrgray17/opentoken
   pipe │ wrap │ stats    JSON-RPC stdio      OpenCode plugin
   any terminal          Claude Code,          auto-loads
   any shell             Cursor, Aider,        transparent
@@ -232,7 +232,7 @@ import {
   compressLZW,
   decompressLZW,
   redactSecrets,
-} from "@opentoken/core";
+} from "@mrgray17/opentoken-core";
 
 // Transform any tool output
 const { output, saved, beforeTokens, afterTokens } =
@@ -309,7 +309,7 @@ produces a larger or corrupted output, the original is returned instead.
 **Yes.** Three interfaces:
 - **CLI** — `opentoken wrap <cmd>` works in any terminal with any agent
 - **MCP** — `opentoken-mcp` works with Claude Code, Cursor, Windsurf, any MCP host
-- **Library** — `@opentoken/core` can be integrated into any Node.js/Bun tool
+- **Library** — `@mrgray17/opentoken-core` can be integrated into any Node.js/Bun tool
 </details>
 
 <details>
@@ -366,9 +366,9 @@ CI order: `typecheck` → `lint` → `checks:regex` → `test`.
 Issues and PRs welcome. The monorepo structure:
 
 ```
-packages/core/     — @opentoken/core (pure logic, no AI-tool deps)
-packages/cli/      — opentoken (CLI binary)
-packages/mcp/      — @opentoken/mcp (MCP server)
+packages/core/     — @mrgray17/opentoken-core (pure logic, no AI-tool deps)
+packages/cli/      — @mrgray17/opentoken-cli (CLI binary)
+packages/mcp/      — @mrgray17/opentoken-mcp (MCP server)
 packages/opencode/ — @mrgray17/opentoken (OpenCode plugin)
 
 tests/core/        — 21 test files, 425 tests

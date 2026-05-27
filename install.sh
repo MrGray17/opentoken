@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ── Config ──────────────────────────────────────────────
-OPENTOKEN_VERSION="${OPENTOKEN_VERSION:-2.0.0}"
+OPENTOKEN_VERSION="${OPENTOKEN_VERSION:-main}"
 PLUGIN_DIR="${HOME}/.config/opencode/plugins/opentoken"
 PLUGIN_FILE="${HOME}/.config/opencode/plugins/opentoken.ts"
 TUI_CONFIG="${HOME}/.config/opencode/tui.json"
@@ -189,8 +189,11 @@ cp -r "$TMPDIR/packages/opencode/"* "$PLUGIN_DIR/"
 # Fix workspace dep so it resolves from npm outside the monorepo
 sed -i 's|"workspace:\*"|"^2.0.0"|g' "$PLUGIN_DIR/package.json"
 
-# Plugin entry point — OpenCode loads this file as the plugin
-cp "$PLUGIN_DIR/src/plugin.ts" "$PLUGIN_FILE"
+# Plugin entry point — wrapped thin import so npm resolution works from parent dir
+cat > "$PLUGIN_FILE" << 'ENTRYEOF'
+import { OpenTokenPlugin } from "./opentoken/src/plugin.ts";
+export default OpenTokenPlugin;
+ENTRYEOF
 
 # ── Install dependencies ───────────────────────────────
 echo "  Installing dependencies..."
