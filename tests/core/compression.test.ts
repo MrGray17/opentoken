@@ -10,14 +10,14 @@ import {
 	getCompressionLevel,
 	resetEscalation,
 	updateContext,
-} from "@opentoken/core/autoescalate";
-import { deduplicate, resetDedup } from "@opentoken/core/dedup";
-import { foldDiff, foldLogs } from "@opentoken/core/folding";
-import { sampleJson } from "@opentoken/core/jsonsample";
-import { compressLTSC, decompressLTSC } from "@opentoken/core/ltsc";
-import { compressLZW, decompressLZW } from "@opentoken/core/lzw";
-import { analyzeContent } from "@opentoken/core/router";
-import { extractSkeleton } from "@opentoken/core/skeleton";
+} from "@mrgray17/opentoken-core/autoescalate";
+import { deduplicate, resetDedup } from "@mrgray17/opentoken-core/dedup";
+import { foldDiff, foldLogs } from "@mrgray17/opentoken-core/folding";
+import { sampleJson } from "@mrgray17/opentoken-core/jsonsample";
+import { compressLTSC, decompressLTSC } from "@mrgray17/opentoken-core/ltsc";
+import { compressLZW, decompressLZW } from "@mrgray17/opentoken-core/lzw";
+import { analyzeContent } from "@mrgray17/opentoken-core/router";
+import { extractSkeleton } from "@mrgray17/opentoken-core/skeleton";
 
 describe("L12: Cross-Call Dedup", () => {
 	it("deduplicates identical output", () => {
@@ -227,7 +227,7 @@ export function createApp(): App {
   return new App()
 }`;
 		// Test extractSymbols directly
-		const symbols = await import("@opentoken/core/symbolindex").then((m) => {
+		const symbols = await import("@mrgray17/opentoken-core/symbolindex").then((m) => {
 			// Create a mock index function that doesn't call stat
 			return m;
 		});

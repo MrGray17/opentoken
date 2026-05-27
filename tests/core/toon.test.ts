@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { convertToTOON } from "@opentoken/core/toon";
+import { convertToTOON } from "@mrgray17/opentoken-core/toon";
 
 describe("convertToTOON", () => {
 	it("converts array of objects to TOON format", () => {

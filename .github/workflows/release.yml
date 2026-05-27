@@ -36,8 +36,8 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # @opentoken/core has no workspace:* deps — publish directly
-      - name: Publish @opentoken/core
+      # @mrgray17/opentoken-core has no workspace:* deps — publish directly
+      - name: Publish @mrgray17/opentoken-core
         run: npm publish --provenance --access public
         working-directory: packages/core
 
@@ -47,7 +47,7 @@ jobs:
           npm publish --provenance --access public
         working-directory: packages/cli
 
-      - name: Publish @opentoken/mcp
+      - name: Publish @mrgray17/opentoken-mcp
         run: |
           sed -i 's|"workspace:\*"|"^2.0.0"|g' package.json
           npm publish --provenance --access public

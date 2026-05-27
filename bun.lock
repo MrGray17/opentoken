@@ -7,7 +7,7 @@
       "devDependencies": {
         "@biomejs/biome": "^2.4.15",
         "@mrgray17/opentoken": "workspace:*",
-        "@opentoken/core": "workspace:*",
+        "@mrgray17/opentoken-core": "workspace:*",
         "@types/bun": "^1.3.14",
         "typescript": "^5.9.3",
       },
@@ -19,7 +19,7 @@
         "opentoken": "./src/cli.ts",
       },
       "dependencies": {
-        "@opentoken/core": "workspace:*",
+        "@mrgray17/opentoken-core": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "^1.3.14",
@@ -27,7 +27,7 @@
       },
     },
     "packages/core": {
-      "name": "@opentoken/core",
+      "name": "@mrgray17/opentoken-core",
       "version": "2.0.0",
       "dependencies": {
         "@opencode-ai/sdk": "^1.15.5",
@@ -38,13 +38,13 @@
       },
     },
     "packages/mcp": {
-      "name": "@opentoken/mcp",
+      "name": "@mrgray17/opentoken-mcp",
       "version": "1.0.0",
       "bin": {
         "opentoken-mcp": "./src/server.ts",
       },
       "dependencies": {
-        "@opentoken/core": "workspace:*",
+        "@mrgray17/opentoken-core": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "^1.3.14",
@@ -55,8 +55,8 @@
       "name": "@mrgray17/opentoken",
       "version": "2.0.0",
       "dependencies": {
+        "@mrgray17/opentoken-core": "workspace:*",
         "@opencode-ai/plugin": "^1.15.5",
-        "@opentoken/core": "workspace:*",
         "@opentui/core": "^0.2.14",
         "@opentui/solid": "^0.2.14",
         "solid-js": "1.9.12",
@@ -154,6 +154,10 @@
 
     "@mrgray17/opentoken": ["@mrgray17/opentoken@workspace:packages/opencode"],
 
+    "@mrgray17/opentoken-core": ["@mrgray17/opentoken-core@workspace:packages/core"],
+
+    "@mrgray17/opentoken-mcp": ["@mrgray17/opentoken-mcp@workspace:packages/mcp"],
+
     "@msgpackr-extract/msgpackr-extract-darwin-arm64": ["@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-LCkGo6JDfaBhgST7UpPWgNgLINpcpabaHfyz5OBx75nUYxBsaEPxjnyNjWpeb/xBup/682QnBfRBy2/LvPutZQ=="],
 
     "@msgpackr-extract/msgpackr-extract-darwin-x64": ["@msgpackr-extract/msgpackr-extract-darwin-x64@3.0.4", "", { "os": "darwin", "cpu": "x64" }, "sha512-zExlW9zUJKZH/tOtVMttwjKa4Xm/3KcNjnE3dPN92uCktwavMxpgCA3MoJK/DOnTWsQgo224OaST27/mPNAf+w=="],
@@ -169,10 +173,6 @@
     "@opencode-ai/plugin": ["@opencode-ai/plugin@1.15.10", "", { "dependencies": { "@opencode-ai/sdk": "1.15.10", "effect": "4.0.0-beta.66", "zod": "4.1.8" }, "peerDependencies": { "@opentui/core": ">=0.2.15", "@opentui/keymap": ">=0.2.15", "@opentui/solid": ">=0.2.15" }, "optionalPeers": ["@opentui/core", "@opentui/keymap", "@opentui/solid"] }, "sha512-V2p7CvpBtKWB+FID7Dl1y0Ci02zUT40A9b2RD9R9BOiuD8ZcKhHWov+irN0xVJA0Eg6OhEBfA0lPKRn1FNKPlw=="],
 
     "@opencode-ai/sdk": ["@opencode-ai/sdk@1.15.10", "", { "dependencies": { "cross-spawn": "7.0.6" } }, "sha512-CUhpmMGGOqzvPnNNjjWmEIodAfP6Qnuki2ChIUKWYF7UImZ4zUcMZnzO5BtUxu/Ni1P8qzWxDioXs+7aIZQEhA=="],
-
-    "@opentoken/core": ["@opentoken/core@workspace:packages/core"],
-
-    "@opentoken/mcp": ["@opentoken/mcp@workspace:packages/mcp"],
 
     "@opentui/core": ["@opentui/core@0.2.16", "", { "dependencies": { "bun-ffi-structs": "0.2.2", "diff": "9.0.0", "marked": "17.0.1", "string-width": "7.2.0", "strip-ansi": "7.1.2", "yoga-layout": "3.2.1" }, "optionalDependencies": { "@opentui/core-darwin-arm64": "0.2.16", "@opentui/core-darwin-x64": "0.2.16", "@opentui/core-linux-arm64": "0.2.16", "@opentui/core-linux-x64": "0.2.16", "@opentui/core-win32-arm64": "0.2.16", "@opentui/core-win32-x64": "0.2.16" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-4vWN15Zc3nsXJlOiHhhpqkBXD+wrNFKxCPtiTiillZYDRre+XsZogVTOOGUDwaBIC23OSxq7imezLmmtShVBEA=="],
 

@@ -31,7 +31,7 @@
 		}
 	},
 	"dependencies": {
-		"@opentoken/core": "workspace:*",
+		"@mrgray17/opentoken-core": "workspace:*",
 		"@opencode-ai/plugin": "^1.15.5",
 		"@opentui/solid": "^0.2.14",
 		"@opentui/core": "^0.2.14",

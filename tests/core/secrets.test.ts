@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { redactSecrets } from "@opentoken/core/utils/secrets";
+import { redactSecrets } from "@mrgray17/opentoken-core/utils/secrets";
 
 describe("Secrets Redaction — Existing Patterns", () => {
 	it("redacts AWS keys", () => {

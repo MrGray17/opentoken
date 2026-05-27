@@ -3,7 +3,7 @@ import {
 	formatStatsSummary,
 	rewriteCommand,
 	transformToolOutput,
-} from "@opentoken/core";
+} from "@mrgray17/opentoken-core";
 import { readline } from "bun";
 
 const currentSessionID = crypto.randomUUID();

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { config, DEFAULT_CONFIG, loadConfig, validateConfig } from "@opentoken/core/config";
+import { config, DEFAULT_CONFIG, loadConfig, validateConfig } from "@mrgray17/opentoken-core/config";
 
 describe("validateConfig", () => {
 	it("returns defaults for empty input", () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getCachedRead, setCachedRead } from "@opentoken/core/utils/cache";
+import { getCachedRead, setCachedRead } from "@mrgray17/opentoken-core/utils/cache";
 
 const TEST_SESSION = "cache-test";
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "opentoken-cache-"));

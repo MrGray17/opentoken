@@ -1,9 +1,9 @@
 // Family filter tests for docker, make, pip — and detection completeness
 import { describe, expect, it } from "bun:test";
-import { detectFamily } from "@opentoken/core/families/detect";
-import { filterDockerOutput } from "@opentoken/core/families/docker";
-import { filterMakeOutput } from "@opentoken/core/families/make";
-import { filterPipOutput } from "@opentoken/core/families/pip";
+import { detectFamily } from "@mrgray17/opentoken-core/families/detect";
+import { filterDockerOutput } from "@mrgray17/opentoken-core/families/docker";
+import { filterMakeOutput } from "@mrgray17/opentoken-core/families/make";
+import { filterPipOutput } from "@mrgray17/opentoken-core/families/pip";
 
 describe("Docker Filters", () => {
 	it("filters docker build progress lines", () => {

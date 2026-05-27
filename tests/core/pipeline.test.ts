@@ -12,16 +12,16 @@ import {
 	getFamilyEffectiveness,
 	isStageWorthwhile,
 	resetCache,
-} from "@opentoken/core/autotune";
-import { filterGeneric } from "@opentoken/core/families/generic";
-import { validateOutputSize } from "@opentoken/core/guards";
+} from "@mrgray17/opentoken-core/autotune";
+import { filterGeneric } from "@mrgray17/opentoken-core/families/generic";
+import { validateOutputSize } from "@mrgray17/opentoken-core/guards";
 import {
 	buildMemoryPrompt,
 	clearMemory,
 	extractContextKeywords,
 	getMemoryStats,
 	writeSessionSummary,
-} from "@opentoken/core/memory";
+} from "@mrgray17/opentoken-core/memory";
 import {
 	aliasJsonKeys,
 	cleanWhitespaceAndNulls,
@@ -33,15 +33,15 @@ import {
 	stripBase64Content,
 	stripThinkingBlocks,
 	suppressOversized,
-} from "@opentoken/core/postcall";
+} from "@mrgray17/opentoken-core/postcall";
 // Phase 1 imports
 import {
 	isMinifiedOrGenerated,
 	preCallFilter,
 	rewriteCommand,
-} from "@opentoken/core/precall";
-import { redactSecrets } from "@opentoken/core/utils/secrets";
-import { estimateTokens } from "@opentoken/core/utils/tokens";
+} from "@mrgray17/opentoken-core/precall";
+import { redactSecrets } from "@mrgray17/opentoken-core/utils/secrets";
+import { estimateTokens } from "@mrgray17/opentoken-core/utils/tokens";
 
 describe("L1: Command Rewrite", () => {
 	it("rewrites npm install to silent", () => {
@@ -400,12 +400,12 @@ describe("New Pre-Call Rewrite Rules", () => {
 
 // ─── PHASE 5 TESTS — Telemetry & Observability ───
 
-import { getErrorSummary, logError } from "@opentoken/core/utils/errors";
+import { getErrorSummary, logError } from "@mrgray17/opentoken-core/utils/errors";
 import {
 	formatStatsSummary,
 	getStatsSummary,
 	saveStatsSummary,
-} from "@opentoken/core/utils/stats";
+} from "@mrgray17/opentoken-core/utils/stats";
 
 describe("Metrics Aggregation", () => {
 	it("returns stats summary structure", () => {

@@ -33,7 +33,7 @@ describe("Smoke", () => {
 
 	it("pipeline compresses real npm install output", async () => {
 		const { filterNpmInstall } = await import(
-			"@opentoken/core/families/npm"
+			"@mrgray17/opentoken-core/families/npm"
 		);
 		const input = `added 150 packages in 5s
 

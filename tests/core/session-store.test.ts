@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { SessionStore } from "@opentoken/core/utils/session-store";
+import { SessionStore } from "@mrgray17/opentoken-core/utils/session-store";
 
 interface TestState {
 	count: number;

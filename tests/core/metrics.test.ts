@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { recordMetric } from "@opentoken/core/utils/metrics";
+import { recordMetric } from "@mrgray17/opentoken-core/utils/metrics";
 
 describe("recordMetric", () => {
 	it("writes a metric entry without throwing", () => {

@@ -26,7 +26,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.15",
 		"@mrgray17/opentoken": "workspace:*",
-		"@opentoken/core": "workspace:*",
+		"@mrgray17/opentoken-core": "workspace:*",
 		"@types/bun": "^1.3.14",
 		"typescript": "^5.9.3"
 	}
