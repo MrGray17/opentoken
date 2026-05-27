@@ -26,7 +26,7 @@
 
 ---
 
-## 📦 Install
+## Install
 
 ```bash
 # CLI — works in any terminal, any shell, any AI tool
@@ -50,7 +50,7 @@ npm install @opentoken/core
 
 ---
 
-## 🚀 10-Second Start
+## 10-Second Start
 
 ```bash
 # Pipe any command output through the compression engine
@@ -80,7 +80,7 @@ That's it. All tool output is now compressed before reaching your LLM.
 
 ---
 
-## 🎯 The Problem
+## The Problem
 
 AI coding agents pass raw command output directly to LLMs — full diffs, complete
 log output, entire directory listings. Most of it is noise.
@@ -97,7 +97,7 @@ answers the same way, costs 50–80% less.
 
 ---
 
-## 📊 Before & After
+## Before & After
 
 ```diff
   $ git diff HEAD~1
@@ -118,7 +118,7 @@ It responds exactly as if it read the full diff.
 
 ---
 
-## ⚙️ The Pipeline
+## The Pipeline
 
 Every tool output passes through 35 compression stages. Each stage ends with a
 **conservative safety check** — if output grew, the original is returned untouched.
@@ -171,7 +171,7 @@ expensive scan on non-compressible input:
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 packages/
@@ -209,7 +209,7 @@ OpenCode plugin.
 
 ---
 
-## 🛡️ Safety & Security
+## Safety & Security
 
 | Guarantee | How |
 |-----------|-----|
@@ -224,7 +224,7 @@ OpenCode plugin.
 
 ---
 
-## 🔌 For Developers
+## For Developers
 
 ```typescript
 import {
@@ -258,7 +258,7 @@ TypeScript definitions included — everything is strictly typed.
 
 ---
 
-## 📊 Real Numbers
+## Real Numbers
 
 | Metric | |
 |--------|---|
@@ -272,7 +272,7 @@ TypeScript definitions included — everything is strictly typed.
 
 ---
 
-## 🆚 Comparison
+## Comparison
 
 | Feature | OpenToken | Truncation | Caveman | Raw |
 |---------|:---------:|:----------:|:-------:|:---:|
@@ -289,7 +289,7 @@ TypeScript definitions included — everything is strictly typed.
 
 ---
 
-## ❓ FAQ
+## FAQ
 
 <details>
 <summary><strong>Does OpenToken change what the model sees?</strong></summary>
@@ -340,7 +340,7 @@ servers, etc.). The CLI and MCP server are pure Node.js compatible.
 
 ---
 
-## 🧪 Development
+## Development
 
 ```bash
 git clone https://github.com/MrGray17/opentoken.git
@@ -361,7 +361,7 @@ CI order: `typecheck` → `lint` → `checks:regex` → `test`.
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Issues and PRs welcome. The monorepo structure:
 
@@ -379,7 +379,7 @@ Run `bun test` from the repo root to test everything.
 
 ---
 
-## 📄 License
+## License
 
 MIT © [OpenToken Contributors](https://github.com/MrGray17/opentoken/graphs/contributors)
 
