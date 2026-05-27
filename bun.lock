@@ -53,15 +53,15 @@
     },
     "packages/opencode": {
       "name": "@mrgray17/opentoken",
-      "version": "2.0.0",
+      "version": "2.0.2",
       "dependencies": {
-        "@mrgray17/opentoken-core": "workspace:*",
         "@opencode-ai/plugin": "^1.15.5",
         "@opentui/core": "^0.2.14",
         "@opentui/solid": "^0.2.14",
         "solid-js": "1.9.12",
       },
       "devDependencies": {
+        "@mrgray17/opentoken-core": "^2.0.0",
         "@types/bun": "^1.3.14",
         "typescript": "^5.9.3",
       },
