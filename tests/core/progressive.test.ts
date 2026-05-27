@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { cleanupOffloaded, progressiveDisclosure } from "opentoken-core/progressive";
+import { cleanupOffloaded, progressiveDisclosure } from "@mrgray17/opentoken-core/progressive";
 
 const TEST_SESSION = "progressive-test";
 

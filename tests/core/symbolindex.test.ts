@@ -3,7 +3,7 @@ import {
 	indexFile,
 	querySymbolIndex,
 	querySymbolPrefix,
-} from "opentoken-core/symbolindex";
+} from "@mrgray17/opentoken-core/symbolindex";
 
 describe("SymbolIndex — Pure functions", () => {
 	it("indexFile parses functions from TypeScript", async () => {

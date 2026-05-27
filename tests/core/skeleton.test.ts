@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { extractSkeleton } from "opentoken-core/skeleton";
+import { extractSkeleton } from "@mrgray17/opentoken-core/skeleton";
 
 describe("extractSkeleton", () => {
 	it("extracts TypeScript symbols", async () => {

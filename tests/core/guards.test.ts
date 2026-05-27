@@ -6,7 +6,7 @@ import {
 	sanitizeFilePath,
 	validateOutputSize,
 	validateToolName,
-} from "opentoken-core/guards";
+} from "@mrgray17/opentoken-core/guards";
 
 describe("validateToolName", () => {
 	it("returns tool name for known tools", () => {

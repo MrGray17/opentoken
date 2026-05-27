@@ -4,10 +4,10 @@ import {
 	getCompressionLevel,
 	resetEscalation,
 	updateContext,
-} from "opentoken-core/autoescalate";
-import { filterGeneric } from "opentoken-core/families/generic";
-import { detectAndHandleBinary, shortenUrls } from "opentoken-core/postcall";
-import { isMinifiedOrGenerated } from "opentoken-core/precall";
+} from "@mrgray17/opentoken-core/autoescalate";
+import { filterGeneric } from "@mrgray17/opentoken-core/families/generic";
+import { detectAndHandleBinary, shortenUrls } from "@mrgray17/opentoken-core/postcall";
+import { isMinifiedOrGenerated } from "@mrgray17/opentoken-core/precall";
 
 const TEST_SESSION = "phase4-test";
 

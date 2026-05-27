@@ -4,7 +4,7 @@ import {
 	compressMessagesInPlace,
 	shouldCompress,
 	getCompressionStats,
-} from "opentoken-core/history";
+} from "@mrgray17/opentoken-core/history";
 
 // biome-ignore lint/suspicious/noExplicitAny: test helper constructing partial SDK types
 function makePart(type: string, overrides: Record<string, unknown> = {}): any {

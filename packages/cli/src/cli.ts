@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { pipeline } from "node:stream/promises";
-import { transformToolOutput } from "opentoken-core";
+import { transformToolOutput } from "@mrgray17/opentoken-core";
 
 const USAGE = `
 opentoken — universal token-saving pipe tool
@@ -224,7 +224,7 @@ async function wrapMode(commandParts: string[]): Promise<void> {
 
 async function statsMode(since?: string): Promise<void> {
 	try {
-		const { formatStatsSummary } = await import("opentoken-core");
+		const { formatStatsSummary } = await import("@mrgray17/opentoken-core");
 		const summary = formatStatsSummary(
 			since === "all"
 				? undefined

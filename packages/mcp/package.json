@@ -1,5 +1,5 @@
 {
-	"name": "opentoken-mcp",
+	"name": "@mrgray17/opentoken-mcp",
 	"version": "1.0.0",
 	"description": "MCP server for OpenToken — compress tool output via JSON-RPC over stdio",
 	"type": "module",
@@ -23,7 +23,7 @@
 		"src/**/*.ts"
 	],
 	"dependencies": {
-		"opentoken-core": "workspace:*"
+		"@mrgray17/opentoken-core": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3.14",

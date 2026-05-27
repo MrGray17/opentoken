@@ -7,7 +7,7 @@ import {
 	compressOutput,
 	getConcisenessDirective,
 	getOutputBudget,
-} from "opentoken-core/outputcomp";
+} from "@mrgray17/opentoken-core/outputcomp";
 
 describe("getConcisenessDirective", () => {
 	it("returns a non-empty string", () => {

@@ -1,11 +1,11 @@
 import { describe, it } from "bun:test";
-import { compressOutput } from "opentoken-core/outputcomp";
-import { applyBashFilter } from "opentoken-core/pipelines/bash";
-import { applyGlobFilter } from "opentoken-core/pipelines/glob";
-import { applyGrepFilter } from "opentoken-core/pipelines/grep";
-import { applyReadFilter } from "opentoken-core/pipelines/read";
-import { suppressOversized } from "opentoken-core/postcall";
-import { conservativeFilter } from "opentoken-core/wrappers";
+import { compressOutput } from "@mrgray17/opentoken-core/outputcomp";
+import { applyBashFilter } from "@mrgray17/opentoken-core/pipelines/bash";
+import { applyGlobFilter } from "@mrgray17/opentoken-core/pipelines/glob";
+import { applyGrepFilter } from "@mrgray17/opentoken-core/pipelines/grep";
+import { applyReadFilter } from "@mrgray17/opentoken-core/pipelines/read";
+import { suppressOversized } from "@mrgray17/opentoken-core/postcall";
+import { conservativeFilter } from "@mrgray17/opentoken-core/wrappers";
 
 const SID = "bench-session";
 

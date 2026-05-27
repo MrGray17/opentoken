@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
-import { readline } from "bun";
 import {
 	formatStatsSummary,
 	rewriteCommand,
 	transformToolOutput,
-} from "opentoken-core";
+} from "@mrgray17/opentoken-core";
+import { readline } from "bun";
 
 const currentSessionID = crypto.randomUUID();
 
@@ -117,7 +117,7 @@ async function handleMessage(msg: JsonRpcRequest): Promise<JsonRpcResponse> {
 							tools: {},
 						},
 						serverInfo: {
-							name: "opentoken-mcp",
+							name: "@mrgray17/opentoken-mcp",
 							version: "1.0.0",
 						},
 					},

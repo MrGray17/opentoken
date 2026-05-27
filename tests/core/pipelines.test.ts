@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { applyBashFilter } from "opentoken-core/pipelines/bash";
-import { applyGlobFilter } from "opentoken-core/pipelines/glob";
-import { applyGrepFilter } from "opentoken-core/pipelines/grep";
-import { applyReadFilter } from "opentoken-core/pipelines/read";
-import { redactSecrets } from "opentoken-core/utils/secrets";
+import { applyBashFilter } from "@mrgray17/opentoken-core/pipelines/bash";
+import { applyGlobFilter } from "@mrgray17/opentoken-core/pipelines/glob";
+import { applyGrepFilter } from "@mrgray17/opentoken-core/pipelines/grep";
+import { applyReadFilter } from "@mrgray17/opentoken-core/pipelines/read";
+import { redactSecrets } from "@mrgray17/opentoken-core/utils/secrets";
 
 const TEST_SESSION = "pipeline-test-session";
 

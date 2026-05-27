@@ -7,19 +7,19 @@
       "devDependencies": {
         "@biomejs/biome": "^2.4.15",
         "@mrgray17/opentoken": "workspace:*",
+        "@mrgray17/opentoken-core": "workspace:*",
         "@types/bun": "^1.3.14",
-        "opentoken-core": "workspace:*",
         "typescript": "^5.9.3",
       },
     },
     "packages/cli": {
-      "name": "opentoken",
+      "name": "@mrgray17/opentoken-cli",
       "version": "2.0.0",
       "bin": {
         "opentoken": "./src/cli.ts",
       },
       "dependencies": {
-        "opentoken-core": "workspace:*",
+        "@mrgray17/opentoken-core": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "^1.3.14",
@@ -27,7 +27,7 @@
       },
     },
     "packages/core": {
-      "name": "opentoken-core",
+      "name": "@mrgray17/opentoken-core",
       "version": "2.0.0",
       "dependencies": {
         "@opencode-ai/sdk": "^1.15.5",
@@ -38,13 +38,13 @@
       },
     },
     "packages/mcp": {
-      "name": "opentoken-mcp",
+      "name": "@mrgray17/opentoken-mcp",
       "version": "1.0.0",
       "bin": {
-        "opentoken-mcp": "./src/server.ts",
+        "@mrgray17/opentoken-mcp": "./src/server.ts",
       },
       "dependencies": {
-        "opentoken-core": "workspace:*",
+        "@mrgray17/opentoken-core": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "^1.3.14",
@@ -55,10 +55,10 @@
       "name": "@mrgray17/opentoken",
       "version": "2.0.0",
       "dependencies": {
+        "@mrgray17/opentoken-core": "workspace:*",
         "@opencode-ai/plugin": "^1.15.5",
         "@opentui/core": "^0.2.14",
         "@opentui/solid": "^0.2.14",
-        "opentoken-core": "workspace:*",
         "solid-js": "1.9.12",
       },
       "devDependencies": {
@@ -153,6 +153,12 @@
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
     "@mrgray17/opentoken": ["@mrgray17/opentoken@workspace:packages/opencode"],
+
+    "@mrgray17/opentoken-cli": ["@mrgray17/opentoken-cli@workspace:packages/cli"],
+
+    "@mrgray17/opentoken-core": ["@mrgray17/opentoken-core@workspace:packages/core"],
+
+    "@mrgray17/opentoken-mcp": ["@mrgray17/opentoken-mcp@workspace:packages/mcp"],
 
     "@msgpackr-extract/msgpackr-extract-darwin-arm64": ["@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-LCkGo6JDfaBhgST7UpPWgNgLINpcpabaHfyz5OBx75nUYxBsaEPxjnyNjWpeb/xBup/682QnBfRBy2/LvPutZQ=="],
 
@@ -295,12 +301,6 @@
     "node-gyp-build-optional-packages": ["node-gyp-build-optional-packages@5.2.2", "", { "dependencies": { "detect-libc": "^2.0.1" }, "bin": { "node-gyp-build-optional-packages": "bin.js", "node-gyp-build-optional-packages-optional": "optional.js", "node-gyp-build-optional-packages-test": "build-test.js" } }, "sha512-s+w+rBWnpTMwSFbaE0UXsRlg7hU4FjekKU4eyAih5T8nJuNZT1nNsskXpxmeqSK9UzkBl6UgRlnKc8hz8IEqOw=="],
 
     "node-releases": ["node-releases@2.0.46", "", {}, "sha512-GYVXHE2KnrzAfsAjl4uP++evGFCrAU1jta4ubEjIG7YWt/64Gqv66a30yKwWczVjA6j3bM4nBwH7Pk1JmDHaxQ=="],
-
-    "opentoken": ["opentoken@workspace:packages/cli"],
-
-    "opentoken-core": ["opentoken-core@workspace:packages/core"],
-
-    "opentoken-mcp": ["opentoken-mcp@workspace:packages/mcp"],
 
     "p-limit": ["p-limit@2.3.0", "", { "dependencies": { "p-try": "^2.0.0" } }, "sha512-//88mFWSJx8lxCzwdAABTJL2MyWB12+eIY7MDL2SqLmAkeKU9qxRvWuSyTjm3FUmpBEMuFfckAIqEaVGUDxb6w=="],
 
