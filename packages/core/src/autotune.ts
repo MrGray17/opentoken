@@ -80,7 +80,7 @@ export function getFamilyEffectiveness(family: string): number {
 // Check if a heavy compression stage is worthwhile for this family
 export function isStageWorthwhile(
 	family: string,
-	threshold: number = 0.1,
+	threshold: number = -0.01,
 ): boolean {
 	return getFamilyEffectiveness(family) >= threshold;
 }

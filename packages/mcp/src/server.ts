@@ -95,7 +95,7 @@ async function handleToolCall(
 			};
 		}
 		case "opentoken_stats": {
-			const summary = formatStatsSummary(currentSessionID);
+			const summary = formatStatsSummary(undefined);
 			return { content: [{ type: "text", text: summary }] };
 		}
 		default:
