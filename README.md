@@ -285,7 +285,7 @@ TypeScript definitions included — everything is strictly typed.
 | CLI pipe mode | ✅ | ✅ | ❌ | ✅ |
 | MCP protocol | ✅ | ❌ | ❌ | ❌ |
 | Model speaks normally | ✅ | ✅ | ❌ | ✅ |
-| Token savings | 50–80% | 10–50% | 50–80% | 0% |
+| Token savings | 70–80% | 10–50% | 50–80% | 0% |
 
 ---
 
