@@ -13,6 +13,7 @@ import { convertToTOON } from "../toon";
 import { getCachedRead, setCachedRead } from "../utils/cache";
 import { redactSecrets } from "../utils/secrets";
 import {
+	aliasJsonKeys,
 	cleanWhitespaceAndNulls,
 	conservativeFilter,
 	detectAndHandleBinary,
@@ -85,6 +86,8 @@ export async function applyReadFilter(
 		() => cleanWhitespaceAndNulls(content),
 		content,
 	);
+
+	content = safeStage("aliasJsonKeys", () => aliasJsonKeys(content), content);
 
 	// TOON format conversion for JSON arrays
 	const toon = safeStage("convertToTOON", () => convertToTOON(content), {

@@ -1,0 +1,1533 @@
+========== guards.ts (90 lines) ==========
+import fs from "node:fs";
+import path from "node:path";
+import { config } from "./config";
+
+// ─── SECURITY GUARDS ───
+
+const MAX_SYMLINK_DEPTH = 40;
+
+export function validateToolName(tool: unknown): string {
+	if (typeof tool !== "string") return "unknown";
+	// Whitelist known tool names
+	const known = [
+		"bash",
+		"read",
+		"grep",
+		"glob",
+		"write",
+		"edit",
+		"web_fetch",
+		"web_search",
+	];
+	return known.includes(tool) ? tool : tool.replace(/[^a-zA-Z0-9_]/g, "");
+}
+
+function resolveRealPath(inputPath: string, depth: number = 0): string | null {
+	if (depth > MAX_SYMLINK_DEPTH) return null;
+	try {
+		const stat = fs.lstatSync(inputPath);
+		if (stat.isSymbolicLink()) {
+			const target = fs.readlinkSync(inputPath);
+			const resolved = path.resolve(path.dirname(inputPath), target);
+			return resolveRealPath(resolved, depth + 1);
+		}
+		return inputPath;
+	} catch {
+		return inputPath;
+	}
+}
+
+export function sanitizeFilePath(
+	filePath: string,
+	rootDir: string,
+): { safe: boolean; resolved: string; reason?: string } {
+	const resolved = path.resolve(rootDir, filePath);
+	const normalizedRoot = path.resolve(rootDir);
+
+	// Resolve symlinks to prevent TOCTOU path traversal via symlink swaps
+	const realResolved = resolveRealPath(resolved);
+	if (realResolved === null) {
+		return {
+			safe: false,
+			resolved: "",
+			reason: `Symlink cycle detected: ${filePath} exceeds max resolution depth`,
+		};
+	}
+
+	if (!realResolved.startsWith(normalizedRoot)) {
+		return {
+			safe: false,
+			resolved: "",
+			reason: `Path traversal blocked: ${filePath} resolves outside project directory`,
+		};
+	}
+
+	// Block absolute paths
+	if (path.isAbsolute(filePath) && !filePath.startsWith(normalizedRoot)) {
+		return {
+			safe: false,
+			resolved: "",
+			reason: `Absolute paths outside project blocked: ${filePath}`,
+		};
+	}
+
+	return { safe: true, resolved: realResolved };
+}
+
+export function validateOutputSize(output: string): {
+	valid: boolean;
+	reason?: string;
+} {
+	const bytes = Buffer.byteLength(output, "utf8");
+	if (bytes > config.maxOutputBytes) {
+		return {
+			valid: false,
+			reason: `Output too large: ${(bytes / 1024 / 1024).toFixed(1)}MB exceeds ${(config.maxOutputBytes / 1024 / 1024).toFixed(0)}MB limit`,
+		};
+	}
+	return { valid: true };
+}
+
+
+========== transform.ts (81 lines) ==========
+import { updateContext } from "./autoescalate";
+import { deduplicate } from "./dedup";
+import { detectFamily } from "./families/detect";
+import { validateToolName } from "./guards";
+import { applyBashFilter } from "./pipelines/bash";
+import { applyGlobFilter } from "./pipelines/glob";
+import { applyGrepFilter } from "./pipelines/grep";
+import { applyReadFilter } from "./pipelines/read";
+import { trackTokensSaved, trackToolCall } from "./session";
+import { recordMetric } from "./utils/metrics";
+import { safeEstimateTokens } from "./wrappers";
+
+export interface TransformOptions {
+	sessionID?: string;
+	enableMetrics?: boolean;
+	enableDedup?: boolean;
+}
+
+export interface TransformResult {
+	output: string;
+	beforeTokens: number;
+	afterTokens: number;
+	saved: number;
+}
+
+export async function transformToolOutput(
+	tool: string,
+	command: string,
+	output: string,
+	opts: TransformOptions = {},
+): Promise<TransformResult> {
+	const toolName = validateToolName(tool);
+	const sid = opts.sessionID ?? "";
+	let filtered = output;
+	const beforeTokens = safeEstimateTokens(output);
+
+	switch (toolName) {
+		case "bash":
+			filtered = await applyBashFilter(sid, command, output);
+			break;
+		case "read":
+			filtered = await applyReadFilter(sid, "", output);
+			break;
+		case "grep":
+			filtered = await applyGrepFilter(sid, output);
+			break;
+		case "glob":
+			filtered = await applyGlobFilter(sid, output);
+			break;
+	}
+
+	if (opts.enableDedup !== false) {
+		filtered = deduplicate(sid, filtered, toolName).result;
+	}
+
+	const afterTokens = safeEstimateTokens(filtered);
+	const saved = beforeTokens - afterTokens;
+
+	if (saved > 0 && sid) {
+		trackTokensSaved(sid, saved);
+		trackToolCall(sid);
+		updateContext(sid, afterTokens);
+	}
+
+	if (opts.enableMetrics !== false && sid) {
+		const family = toolName === "bash" ? detectFamily(command) : toolName;
+		recordMetric({
+			ts: new Date().toISOString(),
+			tool: toolName,
+			family,
+			sessionID: sid,
+			before_tokens: beforeTokens,
+			after_tokens: afterTokens,
+			saved_pct:
+				beforeTokens > 0 ? Math.round((saved / beforeTokens) * 100) : 0,
+		});
+	}
+
+	return { output: filtered, beforeTokens, afterTokens, saved };
+}
+
+
+========== index.ts (131 lines) ==========
+// Transform — main entry point
+
+// Auto-escalation
+export {
+	applyAutoEscalation,
+	deescalate,
+	getCompressionLevel,
+	resetContextUsed,
+	resetEscalation,
+	updateContext,
+} from "./autoescalate";
+// Auto-tune
+export { isStageWorthwhile } from "./autotune";
+export type { OpenTokenConfig } from "./config";
+// State & config
+export { config, loadConfig } from "./config";
+// Dedup
+export { deduplicate, resetDedup } from "./dedup";
+export { filterCargoOutput } from "./families/cargo";
+// Families
+export { detectFamily } from "./families/detect";
+export { filterDockerOutput } from "./families/docker";
+export { filterFsOutput } from "./families/fs";
+export { filterGeneric } from "./families/generic";
+export { filterGitOutput } from "./families/git";
+export { filterMakeOutput } from "./families/make";
+export { filterNpmOutput } from "./families/npm";
+export { filterPipOutput } from "./families/pip";
+export { filterTestOutput } from "./families/test";
+// Filters
+export { filterGlob } from "./filters/glob";
+export { filterGrep } from "./filters/grep";
+export { filterRead, SOURCE_EXTENSIONS } from "./filters/read";
+export { foldDiff, foldDiffAndLogs, foldLogs } from "./folding";
+export {
+	sanitizeFilePath,
+	validateOutputSize,
+	validateToolName,
+} from "./guards";
+// History
+export { compressMessagesInPlace } from "./history";
+export { sampleJson } from "./jsonsample";
+// LSP enforcement
+export {
+	resetLSPState,
+	shouldBlockGlob,
+	shouldBlockGrep,
+	shouldBlockShellGrep,
+	trackLSPUsage,
+} from "./lspfirst";
+export { compressLTSC, decompressLTSC } from "./ltsc";
+// Compression
+export { compressLZW, decompressLZW } from "./lzw";
+// Memory
+export {
+	buildMemoryPrompt,
+	extractContextKeywords,
+	getMemoryStats,
+} from "./memory";
+// Output compression
+export {
+	compressOutput,
+	getConcisenessDirective,
+	getOutputBudget,
+} from "./outputcomp";
+// Pipeline filters
+export { applyBashFilter } from "./pipelines/bash";
+export { applyGlobFilter } from "./pipelines/glob";
+export { applyGrepFilter } from "./pipelines/grep";
+export { applyReadFilter } from "./pipelines/read";
+// Pre-call
+export { preCallFilter, rewriteCommand } from "./precall";
+// Progressive disclosure
+export { cleanupOffloaded, progressiveDisclosure } from "./progressive";
+// Rewind
+export {
+	abbreviateIdentifiers,
+	applyReversibleCompression,
+	cleanupRewind,
+} from "./rewind";
+// Content routing
+export { analyzeContent, getCompressionPipeline } from "./router";
+// Session
+export {
+	finalizeSession,
+	getSessionTracker,
+	loadSessionSummary,
+	resetSessionTracker,
+	trackError,
+	trackFile,
+	trackOutputTokensSaved,
+	trackTokensSaved,
+	trackToolCall,
+	writeSessionState,
+} from "./session";
+export { extractSkeleton } from "./skeleton";
+// Symbol index
+export { indexDirectory, loadIndex } from "./symbolindex";
+export { convertToTOON } from "./toon";
+export type { TransformOptions, TransformResult } from "./transform";
+export { transformToolOutput } from "./transform";
+// Cache
+export { getCachedRead, setCachedRead } from "./utils/cache";
+export { getErrorSummary, logError } from "./utils/errors";
+// Observability
+export { logger } from "./utils/logger";
+export { recordMetric } from "./utils/metrics";
+// Safety
+export { redactSecrets } from "./utils/secrets";
+// Session file
+export {
+	ensureSessionStartFile,
+	writeSessionStartFileAsync,
+} from "./utils/session-file";
+export { SessionStore } from "./utils/session-store";
+export {
+	formatStatsSummary,
+	getStatsSummary,
+	saveStatsSummary,
+} from "./utils/stats";
+export { estimateTokens } from "./utils/tokens";
+export {
+	conservativeFilter,
+	hasErrors,
+	routeContent,
+	safeEstimateTokens,
+	safeStage,
+	safeStageAsync,
+	shouldSkipFilter,
+} from "./wrappers";
+
+
+========== autoescalate.ts (414 lines) ==========
+// Auto-escalation system (#36)
+// Ratchet compression as context fills:
+// 50% fill → LEAN (drop filler, short synonyms)
+// 70% fill → ULTRA (abbreviate, arrows, tables)
+// 85% fill → DYNAMIC CEILING (force aggressive truncation)
+
+import { SessionStore } from "./utils/session-store";
+
+export type CompressionLevel = "off" | "lean" | "ultra" | "ceiling";
+
+export interface EscalationState {
+	level: CompressionLevel;
+	contextUsed: number;
+	contextTotal: number;
+	fillPct: number;
+	history: { level: CompressionLevel; fillPct: number; timestamp: number }[];
+}
+
+// Estimated context window size (varies by model)
+const DEFAULT_CONTEXT_SIZE = 200_000; // ~200K tokens (Sonnet)
+
+function createEscalationState(): EscalationState {
+	return {
+		level: "off",
+		contextUsed: 0,
+		contextTotal: DEFAULT_CONTEXT_SIZE,
+		fillPct: 0,
+		history: [],
+	};
+}
+
+const store = new SessionStore<EscalationState>();
+
+function getState(sessionID: string): EscalationState {
+	return store.get(sessionID, createEscalationState);
+}
+
+// Update context tracking — accumulates token usage across calls
+// Each tool output adds tokens to the LLM context window
+export function updateContext(
+	sessionID: string,
+	used: number,
+	total?: number,
+): CompressionLevel {
+	const s = getState(sessionID);
+	if (total) s.contextTotal = total;
+	s.contextUsed += used;
+	s.fillPct = s.contextTotal > 0 ? s.contextUsed / s.contextTotal : 0;
+
+	const newLevel = computeLevel(s.fillPct);
+
+	if (newLevel !== s.level) {
+		s.level = newLevel;
+		s.history.push({
+			level: newLevel,
+			fillPct: s.fillPct,
+			timestamp: Date.now(),
+		});
+	}
+
+	return newLevel;
+}
+
+// Reset context usage tracking — called when native compaction frees context
+// This prevents fillPct from staying artificially high after compaction
+export function resetContextUsed(sessionID: string): void {
+	const s = getState(sessionID);
+	s.contextUsed = 0;
+	s.fillPct = 0;
+	const newLevel = computeLevel(s.fillPct);
+	if (newLevel !== s.level) {
+		s.level = newLevel;
+		s.history.push({
+			level: newLevel,
+			fillPct: s.fillPct,
+			timestamp: Date.now(),
+		});
+	}
+}
+
+// Compute compression level from fill percentage
+function computeLevel(fillPct: number): CompressionLevel {
+	if (fillPct >= 0.85) return "ceiling";
+	if (fillPct >= 0.75) return "ultra";
+	if (fillPct >= 0.5) return "lean";
+	return "off";
+}
+
+// Get current compression level
+export function getCompressionLevel(sessionID: string): CompressionLevel {
+	return getState(sessionID).level;
+}
+
+// Get escalation state
+export function getEscalationState(sessionID: string): EscalationState {
+	return { ...getState(sessionID) };
+}
+
+// Apply compression based on current level
+export function applyAutoEscalation(
+	text: string,
+	level?: CompressionLevel,
+): string {
+	switch (level) {
+		case "off":
+			return text;
+		case "lean":
+			return applyLeanCompression(text);
+		case "ultra":
+			return applyUltraCompression(text);
+		case "ceiling":
+			return applyCeilingCompression(text);
+		default:
+			return text;
+	}
+}
+
+// LEAN: Drop filler, short synonyms
+function applyLeanCompression(text: string): string {
+	let result = text;
+
+	// Drop filler words (expanded from 12 → 32 phrases)
+	const fillers = [
+		"basically",
+		"actually",
+		"essentially",
+		"simply",
+		"just",
+		"really",
+		"very",
+		"quite",
+		"rather",
+		"somewhat",
+		"in order to",
+		"due to the fact that",
+		"because of the fact that",
+		"it is important to note that",
+		"note that",
+		"keep in mind that",
+		"as mentioned before",
+		"as we can see",
+		"it should be noted",
+		"for the most part",
+		"by and large",
+		"generally speaking",
+		"in most cases",
+		"as a rule",
+		"on the whole",
+		"to a large extent",
+		"for all intents and purposes",
+		"in the grand scheme of things",
+		"when all is said and done",
+		"at the end of the day",
+		"needless to say",
+		"it goes without saying",
+		"as a matter of fact",
+		"in light of the fact that",
+		"with regard to",
+	];
+	for (const filler of fillers) {
+		result = result.replace(new RegExp(`\\b${filler}\\b`, "gi"), "");
+	}
+
+	// Short synonyms
+	const synonyms: Record<string, string> = {
+		utilize: "use",
+		utilizes: "uses",
+		utilizing: "using",
+		utilization: "use",
+		implement: "add",
+		implements: "adds",
+		implementing: "adding",
+		impl: "impl",
+		functionality: "feature",
+		approximately: "~",
+		subsequently: "then",
+		nevertheless: "but",
+		nonetheless: "but",
+		furthermore: "also",
+		moreover: "also",
+		however: "but",
+		therefore: "so",
+		consequently: "so",
+		additionally: "also",
+		specifically: "esp",
+		particularly: "esp",
+		especially: "esp",
+		important: "key",
+		significant: "big",
+		substantial: "large",
+		comprehensive: "full",
+		extensive: "wide",
+		sufficient: "enough",
+		necessary: "needed",
+		required: "needed",
+		optional: "opt",
+		avail: "avail",
+		appropriate: "right",
+		suitable: "fit",
+		relevant: "rel",
+		regarding: "re",
+		concerning: "re",
+		pertaining: "re",
+		"with respect to": "re",
+		"in terms of": "re",
+		"in relation to": "re",
+	};
+
+	for (const [full, short] of Object.entries(synonyms)) {
+		result = result.replace(new RegExp(`\\b${full}\\b`, "gi"), short);
+	}
+
+	// Clean up double spaces
+	result = result.replace(/ {2,}/g, " ");
+
+	return result;
+}
+
+// Remove low-information sentences using simple heuristics
+// Sentences with no named entities, no numbers, no code references = low value
+function removeLowInfoSentences(text: string): string {
+	const sentences = text.split(/(?<=[.!?])\s+/);
+	const kept: string[] = [];
+
+	for (const sentence of sentences) {
+		// Keep short sentences (likely important)
+		if (sentence.split(/\s+/).length <= 8) {
+			kept.push(sentence);
+			continue;
+		}
+
+		// Keep sentences with numbers (data, metrics, versions)
+		if (/\d/.test(sentence)) {
+			kept.push(sentence);
+			continue;
+		}
+
+		// Keep sentences with code references (backticks, paths, symbols)
+		if (/[`/\\@#$%^&*(){}[\]|<>]/.test(sentence)) {
+			kept.push(sentence);
+			continue;
+		}
+
+		// Keep sentences with named entities (capitalized words, proper nouns)
+		if (/[A-Z][a-z]{2,}/.test(sentence)) {
+			kept.push(sentence);
+			continue;
+		}
+
+		// Keep sentences with URLs or emails
+		if (/[a-z]+:\/\//.test(sentence) || /\S+@\S+/.test(sentence)) {
+			kept.push(sentence);
+		}
+
+		// Remove: filler sentences with no signal
+		// e.g., "This is a common pattern that developers use."
+		// e.g., "The function works as expected in most cases."
+	}
+
+	return kept.join(" ");
+}
+
+// ULTRA: Abbreviate, arrows, tables + semantic sentence removal
+function applyUltraCompression(text: string): string {
+	let result = applyLeanCompression(text);
+
+	// Remove low-information sentences (no entities, no numbers, no code refs)
+	result = removeLowInfoSentences(result);
+
+	// Protect code lines: don't apply ULTRA phrase replacements to lines that look like code
+	const lines = result.split("\n");
+	const protectedLines = lines.map((line) => {
+		const isCodeLine =
+			/^\s*(import|export|from|const|let|var|function|class|interface|type|def|fn|pub|struct|enum|trait|impl|mod|use|package|func|return|if|else|for|while|switch|case|try|catch|throw|async|await|new|this|self|super|extends|implements|namespace|declare|module|require|module\.exports|\/\/|#|\/\*|\*|@|<\w+|\{|\}|\[|\]|\(|\)|=>|===|!==|\.\.\.)/.test(
+				line,
+			);
+		if (isCodeLine) return line;
+		return line;
+	});
+	result = protectedLines.join("\n");
+
+	// Replace common phrases with arrows/symbols
+	const phraseReplacements: [RegExp, string][] = [
+		[/\bleads to\b/gi, "→"],
+		[/\bresults in\b/gi, "→"],
+		[/\bcauses\b/gi, "→"],
+		[/\bproduces\b/gi, "→"],
+		[/\breturns\b/gi, "→"],
+		[/\byields\b/gi, "→"],
+		[/\bgenerates\b/gi, "→"],
+		[/\bcreates\b/gi, "→"],
+		[/\bis caused by\b/gi, "←"],
+		[/\bdepends on\b/gi, "←"],
+		[/\brequires\b/gi, "←"],
+		[/\bneeds\b/gi, "←"],
+		[/\bdoes not\b/gi, "≠"],
+		[/\bcannot\b/gi, "≠"],
+		[/\bis not\b/gi, "≠"],
+		[/\bare not\b/gi, "≠"],
+		[/\bwas not\b/gi, "≠"],
+		[/\bwere not\b/gi, "≠"],
+		[/\bwill not\b/gi, "≠"],
+		[/\bshould not\b/gi, "≠"],
+		[/\bmust not\b/gi, "≠"],
+		[/\bis equal to\b/gi, "="],
+		[/\bis equivalent to\b/gi, "="],
+		[/\bis the same as\b/gi, "="],
+		[/\bgreater than\b/gi, ">"],
+		[/\bless than\b/gi, "<"],
+		[/\bgreater than or equal to\b/gi, "≥"],
+		[/\bless than or equal to\b/gi, "≤"],
+		[/\bfor example\b/gi, "eg"],
+		[/\bsuch as\b/gi, "eg"],
+		[/\bthat is\b/gi, "ie"],
+		[/\bin other words\b/gi, "ie"],
+		[/\betcetera\b/gi, "etc"],
+		[/\band so on\b/gi, "etc"],
+		[/\bper second\b/gi, "/s"],
+		[/\bper minute\b/gi, "/min"],
+		[/\bper hour\b/gi, "/hr"],
+	];
+
+	for (const [pattern, replacement] of phraseReplacements) {
+		result = result.replace(pattern, replacement);
+	}
+
+	// Compress list items into table-like format
+	const textLines = result.split("\n");
+	const compressed: string[] = [];
+	let inList = false;
+	let listItems: string[] = [];
+
+	for (const line of textLines) {
+		const isListItem = /^\s*[-*•]\s/.test(line) || /^\s*\d+\.\s/.test(line);
+
+		if (isListItem) {
+			inList = true;
+			listItems.push(
+				line.replace(/^\s*[-*•]\s/, "").replace(/^\s*\d+\.\s/, ""),
+			);
+		} else {
+			if (inList && listItems.length > 2) {
+				// Compress list to semicolon-separated
+				compressed.push(listItems.join("; "));
+			} else {
+				compressed.push(...listItems.map((i) => `- ${i}`));
+			}
+			inList = false;
+			listItems = [];
+			compressed.push(line);
+		}
+	}
+
+	// Flush remaining list
+	if (inList && listItems.length > 2) {
+		compressed.push(listItems.join("; "));
+	} else if (listItems.length > 0) {
+		compressed.push(...listItems.map((i) => `- ${i}`));
+	}
+
+	return compressed.join("\n");
+}
+
+// CEILING: Force aggressive truncation
+function applyCeilingCompression(text: string): string {
+	const lines = text.split("\n");
+
+	// Keep only first 10 + last 5 lines
+	if (lines.length > 30) {
+		const head = lines.slice(0, 10);
+		const tail = lines.slice(-5);
+		const skipped = lines.length - 15;
+		return `${head.join("\n")}\n\n... ${skipped} lines omitted (ceiling mode) ...\n\n${tail.join("\n")}`;
+	}
+
+	// If under 30 lines, apply ultra compression
+	return applyUltraCompression(text);
+}
+
+// Reset escalation state (new session)
+export function resetEscalation(sessionID: string): void {
+	store.reset(sessionID, createEscalationState);
+}
+
+// De-escalate compression level when context fill percentage drops
+// Called periodically to reduce compression when pressure eases
+export function deescalate(sessionID: string): CompressionLevel {
+	const s = getState(sessionID);
+	// If fill percentage dropped below a threshold, step down one level
+	if (s.fillPct < 0.45 && s.level !== "off") {
+		s.level = "off";
+		s.history.push({
+			level: "off",
+			fillPct: s.fillPct,
+			timestamp: Date.now(),
+		});
+	} else if (s.fillPct < 0.8 && s.level === "ceiling") {
+		s.level = "ultra";
+		s.history.push({
+			level: "ultra",
+			fillPct: s.fillPct,
+			timestamp: Date.now(),
+		});
+	} else if (s.fillPct < 0.7 && s.level === "ultra") {
+		s.level = "lean";
+		s.history.push({
+			level: "lean",
+			fillPct: s.fillPct,
+			timestamp: Date.now(),
+		});
+	}
+	return s.level;
+}
+
+
+========== postcall.ts (481 lines) ==========
+// Post-call processors — clean/compress tool results AFTER execution
+// #15 XML/Markdown block stripping (<antThinking>, <thinking>)
+// #16 Binary detection (NUL byte scan, suppress)
+// #17 Output suppression (>500KB → block entirely)
+// #20 Key aliasing (replace long JSON keys with short aliases)
+// #21 Whitespace/null cleanup (strip redundant fields, timestamps)
+// #27 TOON format conversion (JSON arrays → tabular)
+// #28 Aggressive whitespace normalization
+// #29 Log normalization (timestamps, PIDs, elapsed time → static placeholders)
+// #30 Table whitespace minimization (strip padding from CLI tables)
+// #31 JSON minification (lossless whitespace removal)
+
+// #32: ANSI escape sequence stripping — zero risk
+// Strips color codes, cursor movements, and terminal control sequences
+// that tokenizers count as real tokens but carry zero semantic value
+export function stripAnsi(text: string): string {
+	return text.replace(
+		/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g,
+		"",
+	);
+}
+
+// #15: Strip reasoning/thinking blocks
+const THINKING_BLOCKS: RegExp[] = [
+	/<antThinking>[\s\S]*?<\/antThinking>/g,
+	/<thinking>[\s\S]*?<\/thinking>/g,
+	/<reasoning>[\s\S]*?<\/reasoning>/g,
+	/<scratchpad>[\s\S]*?<\/scratchpad>/g,
+	/<inner_monologue>[\s\S]*?<\/inner_monologue>/g,
+];
+
+export function stripThinkingBlocks(text: string): string {
+	let result = text;
+	for (const pattern of THINKING_BLOCKS) {
+		result = result.replace(pattern, "");
+	}
+	// Clean up double newlines left behind
+	return result.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// #16: Binary detection via NUL byte scan
+function isBinaryOutput(text: string): boolean {
+	// Check first 64KB for NUL bytes (expanded from 8KB for better detection)
+	const sample = text.slice(0, 65536);
+	const nulCount = (sample.match(/\0/g) || []).length;
+	return nulCount > 3; // More than 3 NUL bytes = binary
+}
+
+export function detectAndHandleBinary(text: string): {
+	binary: boolean;
+	result: string;
+} {
+	if (isBinaryOutput(text)) {
+		// Try to extract any text content — UTF-8 safe
+		// Strip control chars but preserve valid UTF-8 sequences
+		const textContent = text.replace(
+			/[\0-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g,
+			"",
+		);
+		if (textContent.trim().length < text.length * 0.1) {
+			return {
+				binary: true,
+				result: "[Binary output suppressed — no text content]",
+			};
+		}
+		return {
+			binary: true,
+			result: `[Binary output — ${text.length} bytes, ${Math.round((textContent.length / text.length) * 100)}% text]`,
+		};
+	}
+	return { binary: false, result: text };
+}
+
+// #17: Output suppression — block entirely if too large
+export function suppressOversized(
+	text: string,
+	maxBytes: number,
+): {
+	suppressed: boolean;
+	result: string;
+} {
+	const byteLen = Buffer.byteLength(text, "utf8");
+	if (byteLen > maxBytes) {
+		return {
+			suppressed: true,
+			result: `[Output suppressed: ${Math.round(byteLen / 1024)}KB exceeds ${Math.round(maxBytes / 1024)}KB limit — use targeted queries instead]`,
+		};
+	}
+	return { suppressed: false, result: text };
+}
+
+// #20: Key aliasing — replace long JSON keys with short aliases
+const LONG_KEY_MAP: Record<string, string> = {
+	description: "desc",
+	documentation: "docs",
+	configuration: "config",
+	authentication: "auth",
+	authorization: "authz",
+	implementation: "impl",
+	information: "info",
+	environment: "env",
+	development: "dev",
+	production: "prod",
+	directory: "dir",
+	directories: "dirs",
+	parameters: "params",
+	arguments: "args",
+	properties: "props",
+	attributes: "attrs",
+	references: "refs",
+	definitions: "defs",
+	declarations: "decls",
+	expressions: "exprs",
+	statements: "stmts",
+	conditions: "conds",
+	iterations: "iters",
+	algorithms: "algos",
+	optimizations: "opts",
+	performance: "perf",
+	infrastructure: "infra",
+	architecture: "arch",
+	repository: "repo",
+	repositories: "repos",
+	installation: "install",
+	dependency: "dep",
+	dependencies: "deps",
+	extension: "ext",
+	extensions: "exts",
+	template: "tmpl",
+	templates: "tmpls",
+	context: "ctx",
+	content: "cnt",
+	standard: "std",
+	specification: "spec",
+	specifications: "specs",
+	additional: "addl",
+	available: "avail",
+	previous: "prev",
+	following: "foll",
+	current: "curr",
+	internal: "int",
+	external: "ext",
+	output: "out",
+	outputs: "outs",
+	input: "in",
+	inputs: "ins",
+	message: "msg",
+	messages: "msgs",
+	request: "req",
+	requests: "reqs",
+	response: "res",
+	responses: "resps",
+	error: "err",
+	errors: "errs",
+	warning: "warn",
+	warnings: "warns",
+	successful: "ok",
+	successfully: "ok",
+	temporary: "tmp",
+	package: "pkg",
+	packages: "pkgs",
+	module: "mod",
+	modules: "mods",
+	interface: "iface",
+	interfaces: "ifaces",
+	callback: "cb",
+	callbacks: "cbs",
+	promise: "prom",
+	promises: "proms",
+	asynchronous: "async",
+	synchronous: "sync",
+	container: "ctr",
+	containers: "ctrs",
+	controller: "ctrl",
+	controllers: "ctrls",
+	service: "svc",
+	services: "svcs",
+	middleware: "mw",
+	handler: "hdlr",
+	handlers: "hdlrs",
+	component: "comp",
+	components: "comps",
+	function: "fn",
+	functions: "fns",
+	variable: "var",
+	variables: "vars",
+	parameter: "param",
+	number: "num",
+	numbers: "nums",
+	string: "str",
+	strings: "strs",
+	boolean: "bool",
+	object: "obj",
+	objects: "objs",
+	element: "el",
+	elements: "els",
+	identifier: "id",
+	identifiers: "ids",
+	timestamp: "ts",
+	timestamps: "tss",
+	created_at: "created",
+	updated_at: "updated",
+	deleted_at: "deleted",
+	modified_at: "modified",
+	generated_at: "generated",
+	published_at: "published",
+	expires_at: "expires",
+	started_at: "started",
+	finished_at: "finished",
+	completed_at: "completed",
+};
+
+export function aliasJsonKeys(text: string): string {
+	if (!text.includes("{") || !text.includes("}")) return text;
+
+	// Match keys after { or , (structural JSON positions)
+	return text.replace(/(?<=[{,]\s*)"([a-zA-Z_]\w*)"\s*:/g, (match, key) => {
+		const alias = LONG_KEY_MAP[key];
+		if (alias) {
+			return `"${alias}":`;
+		}
+		return match;
+	});
+}
+
+// #22: URL shortening — strip query params + hash from long URLs
+export function shortenUrls(text: string): string {
+	// Match URLs and check total length in callback
+	return text.replace(/https?:\/\/[^\s"'<>]+/g, (url) => {
+		if (url.length <= 100) return url; // Skip short URLs
+		try {
+			const parsed = new URL(url);
+			// Keep only origin + pathname
+			return parsed.origin + parsed.pathname;
+		} catch {
+			return url; // Invalid URL, leave as-is
+		}
+	});
+}
+
+// #23: Base64 inline content stripping
+export function stripBase64Content(text: string): string {
+	// Replace data:...;base64,... with placeholder
+	return text.replace(
+		/data:[^;]+;base64,[A-Za-z0-9+/=]+/g,
+		"[base64 content stripped]",
+	);
+}
+
+// #21: Whitespace/null cleanup — strip redundant fields
+const NULLISH_PATTERNS: RegExp[] = [
+	/,\s*"[^"]*"\s*:\s*null/g,
+	/,\s*"[^"]*"\s*:\s*""/g,
+	/,\s*"[^"]*"\s*:\s*\[\s*\]/g,
+	/,\s*"[^"]*"\s*:\s*\{\s*\}/g,
+];
+
+const TIMESTAMP_PATTERNS: RegExp[] = [
+	/,\s*"(created_at|updated_at|deleted_at|modified_at|timestamp|ts|date|time|datetime|createdOn|updatedOn|createdAt|updatedAt)"\s*:\s*"[^"]*"/g,
+	/,\s*"(created_at|updated_at|deleted_at|modified_at|timestamp|ts|date|time|datetime|createdOn|updatedOn|createdAt|updatedAt)"\s*:\s*\d+/g,
+];
+
+const REDUNDANT_PATTERNS: RegExp[] = [
+	/,\s*"(hash|checksum|signature|digest)"\s*:\s*"[a-f0-9]{20,}"/g,
+	/,\s*"(_links|_embedded|_meta|pagination|page_info)"\s*:\s*\{[^}]*\}/g,
+];
+
+export function cleanWhitespaceAndNulls(text: string): string {
+	if (!text.includes("{") || !text.includes("}")) return text;
+
+	let result = text;
+
+	// Strip null/empty values
+	for (const pattern of NULLISH_PATTERNS) {
+		result = result.replace(pattern, "");
+	}
+
+	// Strip timestamps (saves tokens, usually not needed for coding)
+	for (const pattern of TIMESTAMP_PATTERNS) {
+		result = result.replace(pattern, "");
+	}
+
+	// Strip redundant fields (IDs, hashes, links, versions, types)
+	for (const pattern of REDUNDANT_PATTERNS) {
+		result = result.replace(pattern, "");
+	}
+
+	// Clean up trailing commas, double commas, and extra whitespace
+	result = result.replace(/,(\s*,)+/g, ",");
+	result = result.replace(/,\s*}/g, "}");
+	result = result.replace(/,\s*]/g, "]");
+	result = result.replace(/\{\s*,/g, "{");
+	result = result.replace(/\[\s*,/g, "[");
+
+	return result;
+}
+
+// Aggressive whitespace normalization — 5-15% savings, zero quality risk
+// Collapses multiple newlines, strips trailing whitespace, normalizes tabs
+export function normalizeWhitespace(text: string): string {
+	let result = text;
+
+	// Collapse 3+ newlines into 2 (preserve paragraph breaks)
+	result = result.replace(/\n{3}/g, "\n\n");
+
+	// Strip trailing whitespace on each line
+	result = result.replace(/[ \t]+$/gm, "");
+
+	// Normalize tabs to 2 spaces (tabs tokenize poorly)
+	result = result.replace(/\t/g, "  ");
+
+	// Strip leading blank lines
+	result = result.replace(/^\n+/, "");
+
+	// Strip trailing blank lines
+	result = result.replace(/\n+$/, "");
+
+	return result;
+}
+
+// #29: Log normalization — replace dynamic runtime noise with static placeholders
+// Enables provider-side prompt caching (90% discount on cached input tokens)
+// Zero quality risk: timestamps, PIDs, and elapsed times are never used for execution
+export function normalizeLogNoise(text: string): string {
+	let result = text;
+
+	// Timestamps: [2026-05-21 15:53:32.412] → [TIMESTAMP]
+	// ISO format: 2026-05-21T15:53:32.412Z → [TIMESTAMP]
+	// Common log format: 21/May/2026:15:53:32 +0000 → [TIMESTAMP]
+	result = result.replace(
+		/\[\d{4}[-/]\d{2}[-/]\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\]/g,
+		"[TIMESTAMP]",
+	);
+	result = result.replace(
+		/\d{4}[-/]\d{2}[-/]\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?/g,
+		"[TIMESTAMP]",
+	);
+
+	// PIDs: PID 29482, pid: 12345, (12345) → [PID]
+	result = result.replace(/\b[Pp][Ii][Dd]\s*\d+/g, "[PID]");
+	result = result.replace(/\(\d{4,}\)/g, "([PID])");
+
+	// Elapsed time: passed in 42ms → passed in [X]ms, 4.234s → [X]s
+	result = result.replace(/(\d+(?:\.\d+)?)\s*ms/g, "[X]ms");
+	result = result.replace(/(\d+(?:\.\d+)?)\s*s\b/g, "[X]s");
+
+	// Memory sizes: 1.234 MB → [X]MB, 512 KB → [X]KB
+	result = result.replace(/(\d+(?:\.\d+)?)\s*(?:MB|KB|GB|TB)/gi, "[X]$2");
+
+	return result;
+}
+
+// #30: Table whitespace minimization — strip padding from CLI tables
+// Zero quality risk: purely visual formatting, all data values preserved
+export function minimizeTableWhitespace(text: string): string {
+	const lines = text.split("\n");
+	const result: string[] = [];
+
+	for (const line of lines) {
+		// Detect table lines: lines with multiple | separators
+		if ((line.match(/\|/g) || []).length >= 2) {
+			// Strip whitespace between | separators: |  id  |  name  | → |id|name|
+			const minimized = line.replace(/\|\s*/g, "|").replace(/\s*\|/g, "|");
+			result.push(minimized);
+		} else {
+			result.push(line);
+		}
+	}
+
+	return result.join("\n");
+}
+
+// #31: JSON minification — lossless whitespace removal
+// Zero quality risk: LLMs read minified JSON perfectly
+export function minifyJSON(text: string): string {
+	if (!text.includes("{") && !text.includes("[")) return text;
+
+	// Try to find and minify JSON blocks
+	// First, try the entire text as JSON
+	try {
+		const parsed = JSON.parse(text);
+		return JSON.stringify(parsed);
+	} catch {
+		/* not a single JSON block */
+	}
+
+	// Try to find JSON objects/arrays in the text and minify them
+	let result = text;
+	let changed = true;
+	let iterations = 0;
+	const MAX_ITERATIONS = 20;
+
+	while (changed && iterations < MAX_ITERATIONS) {
+		changed = false;
+		iterations++;
+
+		// Find JSON objects: { ... }
+		result = result.replace(/\{[^{}]*\}/g, (match) => {
+			try {
+				const parsed = JSON.parse(match);
+				const minified = JSON.stringify(parsed);
+				if (minified.length < match.length) {
+					changed = true;
+					return minified;
+				}
+			} catch {
+				/* not valid JSON */
+			}
+			return match;
+		});
+
+		// Find JSON arrays: [ ... ]
+		result = result.replace(/\[[^[\]]*\]/g, (match) => {
+			try {
+				const parsed = JSON.parse(match);
+				const minified = JSON.stringify(parsed);
+				if (minified.length < match.length) {
+					changed = true;
+					return minified;
+				}
+			} catch {
+				/* not valid JSON */
+			}
+			return match;
+		});
+	}
+
+	return result;
+}
+
+// Line-level repetition folding — collapse consecutive identical lines
+// 0-risk: count preserved, pattern unambiguous, reversible from context
+export function foldRepeatedLines(text: string): string {
+	const lines = text.split("\n");
+	if (lines.length < 3) return text;
+
+	const result: string[] = [];
+	let i = 0;
+
+	while (i < lines.length) {
+		// Check for alternating 2-line pattern ABAB (4+ lines)
+		if (
+			i + 3 < lines.length &&
+			lines[i] === lines[i + 2] &&
+			lines[i + 1] === lines[i + 3] &&
+			lines[i] !== lines[i + 1]
+		) {
+			const a = lines[i];
+			const b = lines[i + 1];
+			let count = 2;
+			let j = i + 4;
+			while (j + 1 < lines.length && lines[j] === a && lines[j + 1] === b) {
+				count++;
+				j += 2;
+			}
+			result.push(`${count}× [${a}, ${b}]`);
+			i = j;
+			continue;
+		}
+
+		// Check for run of identical lines (2+)
+		if (i + 1 < lines.length && lines[i] === lines[i + 1]) {
+			const line = lines[i];
+			let count = 2;
+			let j = i + 2;
+			while (j < lines.length && lines[j] === line) {
+				count++;
+				j++;
+			}
+			result.push(`${count}× ${line}`);
+			i = j;
+			continue;
+		}
+
+		result.push(lines[i]);
+		i++;
+	}
+
+	return result.join("\n");
+}
+
+
+========== precall.ts (324 lines) ==========
+// Pre-call filters — intercept tool args BEFORE execution
+// #3 Block verbose commands → rewrite to quiet
+// #5 Subagent budget enforcement
+// #6 Block minified/generated files
+// #7 Size caps on write/edit
+
+const MINIFIED_PATTERNS = [
+	/\.min\.(js|css)$/,
+	/\.bundle\.(js|css)$/,
+	/\.chunk\.\w+\.js$/,
+	/\.generated\./,
+	/(?:^|\/)dist\//,
+	/(?:^|\/)build\//,
+	/(?:^|\/)out\//,
+	/(?:^|\/)target\//,
+	/(?:^|\/)node_modules\//,
+	/(?:^|\/)\.next\//,
+	/(?:^|\/)\.nuxt\//,
+	/(?:^|\/)\.svelte-kit\//,
+	/(?:^|\/)\.cache\//,
+	/(?:^|\/)__pycache__\//,
+	/(?:^|\/)\.turbo\//,
+	/(?:^|\/)\.parcel-cache\//,
+	/(?:^|\/)coverage\//,
+	/(?:^|\/)\.venv\//,
+	/(?:^|\/)venv\//,
+	/(?:^|\/)vendor\//,
+];
+
+// Lock file patterns — large, auto-generated, blocked by default, overridable
+const LOCK_FILE_PATTERNS = [
+	/package-lock\.json$/,
+	/yarn\.lock$/,
+	/Cargo\.lock$/,
+	/pnpm-lock\.yaml$/,
+	/Gemfile\.lock$/,
+	/go\.sum$/,
+	/composer\.lock$/,
+	/bun\.lock$/,
+	/bun\.lockb$/,
+	/poetry\.lock$/,
+	/Pipfile\.lock$/,
+];
+
+// #3: Command rewrite rules — map verbose → quiet
+const COMMAND_REWRITES: { match: RegExp; rewrite: (cmd: string) => string }[] =
+	[
+		// npm/yarn/bun/pnpm install → add --silent
+		{
+			match: /^(npm|yarn|bun|pnpm)\s+(install|i|add)(\s|$)/,
+			rewrite: (cmd) => {
+				if (
+					cmd.includes("--silent") ||
+					cmd.includes("-s") ||
+					cmd.includes("--quiet") ||
+					cmd.includes("-q")
+				)
+					return cmd;
+				return cmd.replace(
+					/^(npm|yarn|bun|pnpm)\s+(install|i|add)/,
+					"$1 $2 --silent",
+				);
+			},
+		},
+		// npm run → add --silent
+		{
+			match: /^(npm|yarn|bun|pnpm)\s+run\s/,
+			rewrite: (cmd) => {
+				if (
+					cmd.includes("--silent") ||
+					cmd.includes("-s") ||
+					cmd.includes("--quiet") ||
+					cmd.includes("-q")
+				)
+					return cmd;
+				return `${cmd} --silent`;
+			},
+		},
+		// curl → add -s
+		{
+			match: /^curl\s/,
+			rewrite: (cmd) => {
+				if (
+					cmd.includes(" -s") ||
+					cmd.includes(" -S") ||
+					cmd.includes("--silent")
+				)
+					return cmd;
+				return cmd.replace(/^curl\s/, "curl -s ");
+			},
+		},
+		// wget → add -q
+		{
+			match: /^wget\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes(" -q") || cmd.includes("--quiet")) return cmd;
+				return cmd.replace(/^wget\s/, "wget -q ");
+			},
+		},
+		// docker build → add --progress=quiet
+		{
+			match: /^docker\s+build\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes("--progress")) return cmd;
+				return cmd.replace(/^docker\s+build/, "docker build --progress=quiet");
+			},
+		},
+		// docker compose → add --quiet
+		{
+			match: /^docker\s+compose\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes("--quiet") || cmd.includes("-q")) return cmd;
+				return `${cmd} --quiet`;
+			},
+		},
+		// git log without --oneline → add --oneline
+		{
+			match: /^git\s+log(?!\s+--oneline)(?!\s+-\w*o)/,
+			rewrite: (cmd) => cmd.replace(/^git\s+log/, "git log --oneline"),
+		},
+		// cargo build → add --quiet
+		{
+			match: /^cargo\s+(build|check|test|clippy)(?!\s+.*--quiet)/,
+			rewrite: (cmd) => cmd.replace(/^(cargo\s+\w+)/, "$1 --quiet"),
+		},
+		// cargo build --release without --quiet
+		{
+			match: /^cargo\s+(build|check|test|clippy)\s+--release(?!\s+.*--quiet)/,
+			rewrite: (cmd) => cmd.replace(/^(cargo\s+\w+\s+--release)/, "$1 --quiet"),
+		},
+		// pip install → add --quiet
+		{
+			match: /^pip(3)?\s+install\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes("--quiet") || cmd.includes("-q")) return cmd;
+				return cmd.replace(/^(pip3?\s+install)/, "$1 --quiet");
+			},
+		},
+		// pytest → add -q
+		{
+			match: /^pytest(?!\s+-[qr])/,
+			rewrite: (cmd) => `${cmd} -q`,
+		},
+		// ls → add --color=never (saves ANSI escape tokens)
+		{
+			match: /^ls\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes("--color")) return cmd;
+				return cmd.replace(/^ls\s/, "ls --color=never ");
+			},
+		},
+		// tree → add -I to exclude noise
+		{
+			match: /^tree\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes("-I")) return cmd;
+				return `${cmd} -I "node_modules|.git|dist|build|.cache|__pycache__|.venv|coverage|.next|.turbo"`;
+			},
+		},
+		// find → exclude noise dirs
+		{
+			match: /^find\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes("-path") || cmd.includes("-prune")) return cmd;
+				return `${cmd} -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/dist/*" -not -path "*/.cache/*" -not -path "*/__pycache__/*"`;
+			},
+		},
+		// kubectl → add -o wide for more info per token
+		{
+			match: /^kubectl\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes(" -o ")) return cmd;
+				return `${cmd} -o wide`;
+			},
+		},
+		// terraform → add -no-color
+		{
+			match: /^terraform\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes("-no-color")) return cmd;
+				return `${cmd} -no-color`;
+			},
+		},
+		// go build/test/run → add -v=false
+		{
+			match: /^go\s+(build|test|run)\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes("-v=")) return cmd;
+				return cmd.replace(/^(go\s+\w+)/, "$1 -v=false");
+			},
+		},
+		// make → add -s (silent)
+		{
+			match: /^make\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes(" -s") || cmd.includes(" --silent")) return cmd;
+				return `${cmd} -s`;
+			},
+		},
+		// brew → add -q
+		{
+			match: /^brew\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes(" -q") || cmd.includes(" --quiet")) return cmd;
+				return `${cmd} -q`;
+			},
+		},
+		// apt/apt-get → add -qq
+		{
+			match: /^(apt|apt-get)\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes(" -q")) return cmd;
+				return cmd
+					.replace(/^(apt-get)/, "$1 -qq")
+					.replace(/^(apt)(\s)/, "$1 -qq$2");
+			},
+		},
+		// mvn/gradle → add -q
+		{
+			match: /^(mvn|gradle)\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes(" -q") || cmd.includes(" --quiet")) return cmd;
+				return `${cmd} -q`;
+			},
+		},
+	];
+
+// #6: Check if file path is minified/generated
+export function isMinifiedOrGenerated(
+	filePath: string,
+	allowLockFiles?: boolean,
+): boolean {
+	if (allowLockFiles) {
+		return MINIFIED_PATTERNS.some((p) => p.test(filePath));
+	}
+	return (
+		MINIFIED_PATTERNS.some((p) => p.test(filePath)) ||
+		LOCK_FILE_PATTERNS.some((p) => p.test(filePath))
+	);
+}
+
+// #3: Rewrite command to quiet version
+export function rewriteCommand(command: string): string {
+	let result = command.trim();
+	for (const rule of COMMAND_REWRITES) {
+		if (rule.match.test(result)) {
+			result = rule.rewrite(result);
+		}
+	}
+	return result;
+}
+
+// #7: Size caps for write/edit
+export const WRITE_MAX_BYTES = 50 * 1024; // 50KB
+export const EDIT_MAX_BYTES = 20 * 1024; // 20KB
+
+export function checkWriteSize(content: string): {
+	allowed: boolean;
+	reason?: string;
+} {
+	if (content.length > WRITE_MAX_BYTES) {
+		return {
+			allowed: false,
+			reason: `Write blocked: ${Math.round(content.length / 1024)}KB exceeds ${WRITE_MAX_BYTES / 1024}KB limit`,
+		};
+	}
+	return { allowed: true };
+}
+
+export function checkEditSize(content: string): {
+	allowed: boolean;
+	reason?: string;
+} {
+	if (content.length > EDIT_MAX_BYTES) {
+		return {
+			allowed: false,
+			reason: `Edit blocked: ${Math.round(content.length / 1024)}KB exceeds ${EDIT_MAX_BYTES / 1024}KB limit`,
+		};
+	}
+	return { allowed: true };
+}
+
+// Pre-call hook: intercept tool args before execution
+export function preCallFilter(
+	tool: string,
+	args: Record<string, unknown>,
+	options?: { allowLockFiles?: boolean },
+): {
+	blocked?: boolean;
+	reason?: string;
+	modifiedArgs?: Record<string, unknown>;
+} {
+	// #3: Bash command rewriting
+	if (tool === "bash" && typeof args.command === "string") {
+		const rewritten = rewriteCommand(args.command);
+		if (rewritten !== args.command) {
+			return { modifiedArgs: { ...args, command: rewritten } };
+		}
+	}
+
+	// #6: Block reads of minified/generated files
+	if (tool === "read" && typeof args.filePath === "string") {
+		if (isMinifiedOrGenerated(args.filePath, options?.allowLockFiles)) {
+			return {
+				blocked: true,
+				reason: `Blocked: ${args.filePath} is minified/generated (use outline instead)`,
+			};
+		}
+	}
+
+	// #7: Size caps on write/edit
+	if (tool === "write" && typeof args.content === "string") {
+		const check = checkWriteSize(args.content);
+		if (!check.allowed) return { blocked: true, reason: check.reason };
+	}
+
+	if (tool === "edit" && typeof args.content === "string") {
+		const check = checkEditSize(args.content);
+		if (!check.allowed) return { blocked: true, reason: check.reason };
+	}
+
+	return {};
+}
+
+

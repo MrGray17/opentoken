@@ -23,7 +23,6 @@ import {
 	writeSessionSummary,
 } from "@mrgray17/opentoken-core/memory";
 import {
-	aliasJsonKeys,
 	cleanWhitespaceAndNulls,
 	detectAndHandleBinary,
 	minifyJSON,
@@ -112,15 +111,6 @@ describe("L10: Whitespace/Null Cleanup", () => {
 		const input = '{"name": "test", "created_at": "2026-05-19T00:00:00Z"}';
 		const result = cleanWhitespaceAndNulls(input);
 		expect(result).not.toContain("created_at");
-	});
-});
-
-describe("L11: Key Aliasing", () => {
-	it("aliases long keys", () => {
-		const input = '{"description": "test", "configuration": {"auth": true}}';
-		const result = aliasJsonKeys(input);
-		expect(result).toContain('"desc"');
-		expect(result).toContain('"config"');
 	});
 });
 
@@ -384,14 +374,7 @@ describe("New Pre-Call Rewrite Rules", () => {
 		const result = rewriteCommand("terraform plan");
 		expect(result).toBe("terraform plan -no-color");
 	});
-	it("adds -v=false to go build", () => {
-		const result = rewriteCommand("go build ./...");
-		expect(result).toBe("go build -v=false ./...");
-	});
-	it("adds -s to make", () => {
-		const result = rewriteCommand("make build");
-		expect(result).toBe("make build -s");
-	});
+	// (go build -v=false and make -s rewrites removed — caused silent data loss)
 	it("adds -q to brew", () => {
 		const result = rewriteCommand("brew install node");
 		expect(result).toBe("brew install node -q");

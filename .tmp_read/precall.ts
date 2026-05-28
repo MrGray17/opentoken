@@ -181,7 +181,22 @@ const COMMAND_REWRITES: { match: RegExp; rewrite: (cmd: string) => string }[] =
 				return `${cmd} -no-color`;
 			},
 		},
-		// (make and go test rewrites removed — they caused silent data loss)
+		// go build/test/run → add -v=false
+		{
+			match: /^go\s+(build|test|run)\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes("-v=")) return cmd;
+				return cmd.replace(/^(go\s+\w+)/, "$1 -v=false");
+			},
+		},
+		// make → add -s (silent)
+		{
+			match: /^make\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes(" -s") || cmd.includes(" --silent")) return cmd;
+				return `${cmd} -s`;
+			},
+		},
 		// brew → add -q
 		{
 			match: /^brew\s/,
