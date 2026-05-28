@@ -36,23 +36,28 @@ jobs:
       - run: bun install
 
       - name: Publish core
-        run: npm publish --access public
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+          npm publish --access public
         working-directory: packages/core
 
       - name: Publish cli
         run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/cli
 
       - name: Publish mcp
         run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/mcp
 
       - name: Publish opencode
         run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/opencode
