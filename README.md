@@ -29,16 +29,21 @@
 ## Install
 
 ```bash
-# CLI — run anywhere, no install needed
-bun x @mrgray17/opentoken-cli wrap git diff HEAD~1
-
-# install globally (optional)
-bun install -g @mrgray17/opentoken-cli
+# OpenCode plugin — auto-loads, zero config
+opencode plugin @mrgray17/opentoken@latest --global
 ```
 
 ```bash
 # MCP server — for Claude Code, Cursor, Windsurf, etc.
 bun x @mrgray17/opentoken-mcp
+```
+
+```bash
+# CLI — run anywhere, no install needed
+bun x @mrgray17/opentoken-cli wrap git diff HEAD~1
+
+# install globally (optional)
+bun install -g @mrgray17/opentoken-cli
 ```
 
 ```bash
