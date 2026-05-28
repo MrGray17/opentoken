@@ -39,25 +39,25 @@ jobs:
 
       # @mrgray17/opentoken-core has no workspace:* deps — publish directly
       - name: Publish @mrgray17/opentoken-core
-        run: npm publish --provenance --access public
+        run: npm publish --access public
         working-directory: packages/core
 
       - name: Publish @mrgray17/opentoken-cli
         run: |
           sed -i 's|"workspace:\*"|"^2.0.0"|g' package.json
-          npm publish --provenance --access public
+          npm publish --access public
         working-directory: packages/cli
 
       - name: Publish @mrgray17/opentoken-mcp
         run: |
           sed -i 's|"workspace:\*"|"^2.0.0"|g' package.json
-          npm publish --provenance --access public
+          npm publish --access public
         working-directory: packages/mcp
 
       - name: Publish @mrgray17/opentoken
         run: |
           sed -i 's|"workspace:\*"|"^2.0.0"|g' package.json
-          npm publish --provenance --access public
+          npm publish --access public
         working-directory: packages/opencode
 
       - name: Create GitHub Release
