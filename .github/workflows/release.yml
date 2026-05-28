@@ -32,10 +32,10 @@ jobs:
           bun-version: latest
       - run: bun install
 
-      - name: Setup npm auth
-        run: echo "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}" > ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          registry-url: "https://registry.npmjs.org"
+      - run: npm config set //registry.npmjs.org/:_authToken ${{ secrets.NPM_TOKEN }}
 
       # @mrgray17/opentoken-core has no workspace:* deps — publish directly
       - name: Publish @mrgray17/opentoken-core
