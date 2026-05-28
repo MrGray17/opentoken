@@ -31,15 +31,18 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           node-version: "22"
 
-      # Publish each package — no install needed, npm publish only reads package.json
       - name: Publish @mrgray17/opentoken-core
-        run: npm publish --access public
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          cat ~/.npmrc
+          npm publish --access public
         working-directory: packages/core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @mrgray17/opentoken-cli
         run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/cli
@@ -48,6 +51,7 @@ jobs:
 
       - name: Publish @mrgray17/opentoken-mcp
         run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/mcp
@@ -56,6 +60,7 @@ jobs:
 
       - name: Publish @mrgray17/opentoken
         run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/opencode
