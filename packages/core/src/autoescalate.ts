@@ -257,7 +257,7 @@ function removeLowInfoSentences(text: string): string {
 		// e.g., "The function works as expected in most cases."
 	}
 
-	return kept.join(" ");
+	return kept.join("\n");
 }
 
 // ULTRA: Abbreviate, arrows, tables + semantic sentence removal
