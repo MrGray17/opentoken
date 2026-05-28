@@ -25,6 +25,8 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,32 +34,31 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
       - run: bun install
 
+      - uses: actions/setup-node@v4
+        with:
+          registry-url: "https://registry.npmjs.org"
+          node-version: "22"
+
       - name: Publish core
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
-          npm publish --access public
+        run: npm publish --access public
         working-directory: packages/core
 
       - name: Publish cli
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/cli
 
       - name: Publish mcp
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/mcp
 
       - name: Publish opencode
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/opencode
