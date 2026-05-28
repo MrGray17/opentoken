@@ -13,6 +13,7 @@ jobs:
         with:
           bun-version: latest
       - run: bun install
+      - run: bun run --filter=@mrgray17/opentoken build
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run checks:regex
