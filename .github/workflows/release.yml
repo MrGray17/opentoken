@@ -1,8 +1,8 @@
 name: Release
-
 on:
   push:
-    tags: [v*]
+    tags:
+      - "v*"
 
 jobs:
   test:
@@ -20,45 +20,51 @@ jobs:
       - run: bun test
 
   publish:
-    needs: test
+    needs: [test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
       - run: bun install
 
-      - run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
-
-      # @mrgray17/opentoken-core has no workspace:* deps — publish directly
-      - name: Publish @mrgray17/opentoken-core
+      - name: Publish core
         run: npm publish --access public
         working-directory: packages/core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @mrgray17/opentoken-cli
+      - name: Publish cli
         run: |
-          sed -i 's|"workspace:\*"|"^2.0.0"|g' package.json
+          sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @mrgray17/opentoken-mcp
+      - name: Publish mcp
         run: |
-          sed -i 's|"workspace:\*"|"^2.0.0"|g' package.json
+          sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/mcp
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @mrgray17/opentoken
+      - name: Publish opencode
         run: |
-          sed -i 's|"workspace:\*"|"^2.0.0"|g' package.json
+          sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
           npm publish --access public
         working-directory: packages/opencode
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           tag_name: ${{ github.ref_name }}
