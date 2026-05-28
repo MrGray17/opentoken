@@ -33,7 +33,10 @@ jobs:
 
       # setup-node writes to $NPM_CONFIG_USERCONFIG — append our token there
       - name: Configure npm auth
-        run: echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> $NPM_CONFIG_USERCONFIG
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> $NPM_CONFIG_USERCONFIG
+          cat $NPM_CONFIG_USERCONFIG
+          npm whoami
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
