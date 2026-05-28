@@ -24,39 +24,47 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - uses: actions/setup-node@v4
+        with:
+          registry-url: "https://registry.npmjs.org"
+          node-version: "22"
       - run: bun install
-
-      - name: Setup npm auth
-        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
 
       # @mrgray17/opentoken-core has no workspace:* deps — publish directly
       - name: Publish @mrgray17/opentoken-core
         run: npm publish --access public
         working-directory: packages/core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @mrgray17/opentoken-cli
         run: |
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
-          npm publish --provenance --access public
+          npm publish --access public
         working-directory: packages/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @mrgray17/opentoken-mcp
         run: |
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
-          npm publish --provenance --access public
+          npm publish --access public
         working-directory: packages/mcp
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @mrgray17/opentoken
         run: |
           sed -i 's|"workspace:*"|"^2.1.0"|g' package.json
-          npm publish --provenance --access public
+          npm publish --access public
         working-directory: packages/opencode
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - uses: softprops/action-gh-release@v2
         with:
