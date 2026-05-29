@@ -16,59 +16,80 @@
   <a href="https://github.com/MrGray17/opentoken/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-334155" /></a>
 </p>
 
-| 5M+ tokens saved | 74% avg compression | 35 stages | 431 tests | 10 families | 0 regressions |
+| 5M+ tokens saved | 74% avg compression | 35 stages | 431 tests | 10 command families | 0 regressions |
 |---|---|---|---|---|---|
 
 </div>
 
 ---
 
-## The Problem
+## What is OpenToken?
 
-AI coding agents pass raw command output directly to LLMs -- full git diffs, complete test logs, entire directory listings. Most of it is noise.
+OpenToken sits between your AI coding agent and its tools. Every time a command runs — `git diff`, `npm install`, `cargo build` — OpenToken intercepts the output and strips the noise before it reaches the LLM.
 
-| Raw output | What the model actually needs |
-|---|---|
-| 47K git diff with unchanged context lines | Changed files + hunks only |
-| npm install tree of 2000 deps | Added/removed/changed packages |
-| 15K test run with dots and timing | Failures + test count |
-| docker build with progress bars | Image ID + errors |
+The model sees clean, essential information. It reasons the same way. It answers the same way. But it costs **50-80% fewer tokens**.
 
-**OpenToken strips the noise. Keeps the signal.** The model reasons the same way, answers the same way, costs **50-80% less**.
+```
+$ git diff HEAD~1
+  - 2,114 tokens of raw diff noise
+
+$ opentoken wrap "git diff HEAD~1"
+  + 2 imports added: createRequire, SessionStore
+  - 407 tokens ---- 81% reduction
+```
+
+---
+
+## Feature Comparison
+
+| | [OpenToken](https://github.com/MrGray17/opentoken) | [RTK](https://github.com/rtk-ai/rtk) | [QTK](https://github.com/qalarc/QTK) | Caveman | OpenCode built-in | Raw |
+|---|---|---|---|---|---|---|
+| **Approach** | Full compression engine | CLI proxy | opencode plugin | Language mode | Basic truncation | none |
+| **Token savings** | 50-80% | 60-90% | 60-90% | ~75% (messages) | 20-30% | 0% |
+| **Runtime** | Bun / Node | Rust binary | Bun / Node | Any LLM | built-in | N/A |
+| **Compression stages** | 35 | ~10 | ~10 | 1 (style) | 1 (truncation) | 0 |
+| **Safety (0-risk)** | ✅ every stage | ❌ | ❌ | ❌ | ❌ | N/A |
+| **Secrets redaction** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **MCP server** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **CLI pipe/wrap** | ✅ | ✅ | ❌ | ❌ | ❌ | N/A |
+| **Cross-call dedup** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Progressive** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Reversible (rewind)** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Stats & monitoring** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Auto-tuning** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **10 command families** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Stars** | — | 56K | — | — | — | — |
+
+> **RTK**: CLI proxy in Rust. ~10 compression patterns for git/npm/docker output. No safety filters, no MCP server, no stats.  
+> **QTK**: opencode-specific spiritual sibling of RTK. Same TOML DSL syntax.  
+> **Caveman**: Ultra-compressed language mode. Saves tokens on *your messages*, not tool output. Complements OpenToken well.
 
 ---
 
 ## Quick Start
 
-### Install
-
 ```bash
 # OpenCode plugin -- auto-loads, zero config
 npm install -g @mrgray17/opentoken
 
-# MCP server -- for Claude Desktop, Cursor, VS Code, Windsurf
+# MCP server -- any IDE (Cursor, Windsurf, Claude, VS Code)
 npm install -g @mrgray17/opentoken-mcp
 
-# CLI -- compress any output, pipe or wrap
+# CLI -- pipe or wrap anything
 bun x @mrgray17/opentoken-cli wrap "git diff HEAD~1"
 
-# Library -- build your own pipeline
+# Library -- build custom pipelines
 npm install @mrgray17/opentoken-core
 ```
 
-Requires Bun v1.2+. [Install Bun](https://bun.sh).
+Requires **Bun v1.2+**. [Install Bun](https://bun.sh) (one command).
 
 ### Try it
 
 ```bash
-# Pipe any command output through the compression engine
-git diff HEAD~1 | opentoken -t bash
-
-# Wrap it -- same result, cleaner syntax
-opentoken wrap cargo build --release
-
-# Check your savings
-opentoken stats
+git diff HEAD~1 | opentoken -t bash         # pipe mode
+opentoken wrap cargo build --release         # wrap mode
+opentoken stats                               # check savings
 ```
 
 ---
@@ -117,43 +138,6 @@ npm install -g @mrgray17/opentoken-mcp
 }
 ```
 </details>
-
----
-
-## Comparison
-
-| | Raw output | OpenCode built-in | **OpenToken** |
-|---|---|---|---|
-| **Compression rate** | 0% | ~20-30% | **50-80%** |
-| **Command families** | 0 | 0 | **10** (git, npm, cargo, docker, pip, make, fs, test, log, generic) |
-| **Compression stages** | 0 | basic truncation | **35** (LZ77, LZW, folding, minification, dedup, ...) |
-| **Safety filters** | none | none | **every stage** (0-risk: original returned if output grew) |
-| **Secrets redaction** | none | none | **built-in** |
-| **MCP server** | no | no | **yes** (any MCP-compatible IDE) |
-| **CLI tool** | no | limited | **yes** (pipe, wrap, stats) |
-| **Cross-call dedup** | no | no | **yes** |
-| **Progressive** | no | no | **yes** (summary-first, full on demand) |
-| **Reversible** | no | no | **yes** (rewind) |
-| **Stats & monitoring** | no | no | **yes** (session + all-time, by tool) |
-
----
-
-## Before & After
-
-```
-$ opentoken wrap "git diff HEAD~1"
-
-diff --git a/src/autoescalate.ts b/src/autoescalate.ts
-  - 2,114 tokens
-  + import { createRequire } from "module";
-  + import { SessionStore } from "./utils/session-store";
-
-  2,114 tokens -> 407 tokens ---- 81% reduction
-```
-
-The model sees: *"2 imports added to autoescalate.ts -- createRequire and SessionStore."*
-
-It responds exactly as if it read the full diff. **81% fewer tokens.**
 
 ---
 
@@ -215,3 +199,4 @@ MIT -- see [LICENSE](https://github.com/MrGray17/opentoken/blob/main/LICENSE).
 <a href="https://github.com/OhOkThisIsFine">
   <img src="https://github.com/OhOkThisIsFine.png" width="40" height="40" alt="OhOkThisIsFine" style="border-radius: 50%;" />
 </a>
+
