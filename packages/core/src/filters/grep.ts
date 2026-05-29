@@ -18,6 +18,7 @@ const NOISE_PATTERNS = [
 ];
 
 const MAX_MATCHES_PER_FILE = 10;
+const MAX_MATCH_LINE_LENGTH = 120;
 
 interface GrepMatch {
 	file: string;
@@ -71,7 +72,11 @@ export function filterGrep(output: string): string {
 				matches.set(parsed.file, fileMatches);
 			}
 			if (fileMatches.length < MAX_MATCHES_PER_FILE) {
-				fileMatches.push(`${parsed.lineNum}: ${parsed.content}`);
+				let content = parsed.content;
+				if (content.length > MAX_MATCH_LINE_LENGTH) {
+					content = content.slice(0, MAX_MATCH_LINE_LENGTH) + "...";
+				}
+				fileMatches.push(`${parsed.lineNum}: ${content}`);
 			}
 		}
 	} else {
@@ -93,7 +98,11 @@ export function filterGrep(output: string): string {
 				matches.set(file, fileMatches);
 			}
 			if (fileMatches.length < MAX_MATCHES_PER_FILE) {
-				fileMatches.push(`${lineNum}: ${content}`);
+				let trimmed = content;
+				if (trimmed.length > MAX_MATCH_LINE_LENGTH) {
+					trimmed = trimmed.slice(0, MAX_MATCH_LINE_LENGTH) + "...";
+				}
+				fileMatches.push(`${lineNum}: ${trimmed}`);
 			}
 		}
 	}
@@ -102,17 +111,47 @@ export function filterGrep(output: string): string {
 		return "(no matches)";
 	}
 
-	let result = `${matches.size} files, ${[...matches.values()].reduce((a, b) => a + b.length, 0)} matches:\n\n`;
-	for (const [file, fileMatches] of matches) {
-		result += `${file}:\n`;
-		for (const m of fileMatches) {
-			result += `  ${m}\n`;
-		}
-		if (fileMatches.length >= MAX_MATCHES_PER_FILE) {
-			result += `  ... more matches\n`;
+	// Build grouped display: collapse files in same directory (3+ files)
+	const dirs = new Map<string, string[]>();
+	for (const file of matches.keys()) {
+		const lastSlash = file.lastIndexOf("/");
+		const dir = lastSlash === -1 ? "." : file.slice(0, lastSlash);
+		if (!dirs.has(dir)) dirs.set(dir, []);
+		dirs.get(dir)?.push(file);
+	}
+
+	let totalMatches = 0;
+	let result = "";
+
+	for (const [dir, files] of dirs) {
+		if (files.length >= 3) {
+			const names = files.map((f) => f.slice(f.lastIndexOf("/") + 1));
+			result += `${dir}/ (${files.length} files: ${names.join(", ")}):\n`;
+			for (const file of files) {
+				const fileMatches = matches.get(file);
+				if (!fileMatches) continue;
+				totalMatches += fileMatches.length;
+				result += `  ${file.slice(file.lastIndexOf("/") + 1)}:\n`;
+				for (const m of fileMatches) {
+					result += `    ${m}\n`;
+				}
+			}
+		} else {
+			for (const file of files) {
+				const fileMatches = matches.get(file);
+				if (!fileMatches) continue;
+				totalMatches += fileMatches.length;
+				result += `${file}:\n`;
+				for (const m of fileMatches) {
+					result += `  ${m}\n`;
+				}
+				if (fileMatches.length >= MAX_MATCHES_PER_FILE) {
+					result += `  ... more matches\n`;
+				}
+			}
 		}
 		result += "\n";
 	}
 
-	return result.trim();
+	return `${dirs.size} files in ${dirs.size === 1 ? "1 dir" : `${dirs.size} dirs`}, ${totalMatches} matches:\n\n${result.trim()}`;
 }

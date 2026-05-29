@@ -68,6 +68,7 @@ export { applyBashFilter } from "./pipelines/bash";
 export { applyGlobFilter } from "./pipelines/glob";
 export { applyGrepFilter } from "./pipelines/grep";
 export { applyReadFilter } from "./pipelines/read";
+export { setProjectRoot, shortenPaths } from "./pipelines/shared";
 // Pre-call
 export { preCallFilter, rewriteCommand } from "./precall";
 // Progressive disclosure

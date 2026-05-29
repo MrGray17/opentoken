@@ -3,10 +3,12 @@ import { createInterface } from "node:readline";
 import {
 	formatStatsSummary,
 	rewriteCommand,
+	setProjectRoot,
 	transformToolOutput,
 } from "@mrgray17/opentoken-core";
 
 const currentSessionID = crypto.randomUUID();
+setProjectRoot(process.cwd());
 
 interface JsonRpcRequest {
 	jsonrpc: string;

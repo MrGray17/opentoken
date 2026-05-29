@@ -41,6 +41,7 @@ import {
 	safeStage,
 	safeStageAsync,
 	saveStatsSummary,
+	setProjectRoot,
 	shouldBlockGlob,
 	shouldBlockGrep,
 	shouldBlockShellGrep,
@@ -113,6 +114,7 @@ function computePerStageSuccess(): Record<string, number> {
 // ─── MAIN PLUGIN ───
 
 export const OpenTokenPlugin: Plugin = async ({ directory }) => {
+	setProjectRoot(directory);
 	logger.info(undefined, undefined, "Plugin loading...");
 	await loadConfig(directory);
 

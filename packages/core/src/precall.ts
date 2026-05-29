@@ -214,7 +214,7 @@ const COMMAND_REWRITES: { match: RegExp; rewrite: (cmd: string) => string }[] =
 				return cmd.replace(/^(go\s+test)/, "$1 -v");
 			},
 		},
-		// (make and go test rewrites removed — they caused silent data loss)
+		// older make+go-test rewrites removed (caused silent data loss); safe go test -v kept above
 		// brew → add -q
 		{
 			match: /^brew\s/,

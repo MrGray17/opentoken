@@ -17,7 +17,7 @@
 export function cleanJsonValues(text: string): string {
 	// Remove entire key-value pairs where value is null, empty, false or 0
 	text = text.replace(/"[^"]+"\s*:\s*(null|""|"\[\]")/g, "");
-	text = text.replace(/"[^"]+"\s*:\s*(false|0|\[\]|\{\})/g, "");
+	text = text.replace(/"[^"]+"\s*:\s*(false|0(?![0-9.eE+-])|\[\]|\{\})/g, "");
 	// Clean up double commas and trailing commas
 	text = text.replace(/,\s*,/g, ",");
 	text = text.replace(/,\s*}/g, "}");
