@@ -1,6 +1,6 @@
 {
 	"name": "@mrgray17/opentoken-core",
-	"version": "2.1.1",
+	"version": "2.2.0",
 	"description": "Universal token-saving core — pure-logic compression pipeline, no platform dependencies",
 	"type": "module",
 	"license": "MIT",
