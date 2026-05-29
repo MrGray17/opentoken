@@ -76,18 +76,29 @@ export function filterGitDiff(output: string): string {
 
 	if (files.length === 0) return "(no changes)";
 
-	let result = `Files changed: ${files.length}\n`;
+	let added = 0;
+	let removed = 0;
+	for (const h of hunks) {
+		if (h.startsWith("+")) added++;
+		else if (h.startsWith("-")) removed++;
+	}
+
+	let result = `Files changed: ${files.length}`;
+	if (added > 0 || removed > 0) {
+		result += ` (+${added} -${removed})`;
+	}
+	result += "\n";
 	result += files.map((f) => `  ${f}`).join("\n");
-	if (hunks.length > 0 && hunks.length <= 50) {
+	if (hunks.length > 0 && hunks.length <= 30) {
 		result += `\n\n${hunks.join("\n")}`;
-	} else if (hunks.length > 50) {
-		result += `\n\n... ${hunks.length} hunk headers (truncated)`;
+	} else if (hunks.length > 30) {
+		result += `\n\n... ${hunks.length} changed lines (condensed)`;
 	}
 
 	return result;
 }
 
-export function filterGitLog(output: string, maxEntries = 10): string {
+export function filterGitLog(output: string, maxEntries = 30): string {
 	const lines = output.split("\n");
 	const commits: string[] = [];
 	let current: string | null = null;
@@ -116,12 +127,31 @@ export function filterGitOutput(command: string, output: string): string {
 	}
 
 	if (command.includes("status")) return filterGitStatus(output);
-	if (command.includes("diff")) return filterGitDiff(output);
+	if (command.includes("diff") || command.includes("show"))
+		return filterGitDiff(output);
 	if (command.includes("log")) return filterGitLog(output);
 
+	// Listing commands: keep first N lines
+	if (
+		command.includes("branch") ||
+		command.includes("stash") ||
+		command.includes("remote") ||
+		command.includes("tag")
+	) {
+		const lines = output.split("\n");
+		const maxLines = 30;
+		if (lines.length > maxLines) {
+			return (
+				lines.slice(0, maxLines).join("\n") +
+				`\n... ${lines.length - maxLines} more lines`
+			);
+		}
+		return output;
+	}
+
 	// Default: truncate if too long
-	if (output.length > 10000) {
-		return `${output.slice(0, 5000)}\n... (truncated)`;
+	if (output.length > 8000) {
+		return `${output.slice(0, 4000)}\n... (truncated)`;
 	}
 	return output;
 }
