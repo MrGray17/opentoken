@@ -34,35 +34,51 @@ jobs:
       - name: Configure npm auth
         run: |
           printf '//registry.npmjs.org/:_authToken=%s\nregistry=https://registry.npmjs.org/\n' "$NODE_AUTH_TOKEN" > "$NPM_CONFIG_USERCONFIG"
-          cat "$NPM_CONFIG_USERCONFIG"
           npm whoami
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @mrgray17/opentoken-core
-        run: npm publish --access public
+        run: |
+          VER=${GITHUB_REF_NAME#v}
+          if npm view @mrgray17/opentoken-core@$VER version &>/dev/null; then
+            echo "core@$VER already published, skipping"
+          else
+            npm publish --access public
+          fi
         working-directory: packages/core
 
       - name: Publish @mrgray17/opentoken-cli
         run: |
           VER=${GITHUB_REF_NAME#v}
           sed -i "s|\"workspace:*\"|\"^$VER\"|g" package.json
-          npm publish --access public
+          if npm view @mrgray17/opentoken-cli@$VER version &>/dev/null; then
+            echo "cli@$VER already published, skipping"
+          else
+            npm publish --access public
+          fi
         working-directory: packages/cli
 
       - name: Publish @mrgray17/opentoken-mcp
         run: |
-          if [ -d bin ]; then bun run build; fi
           VER=${GITHUB_REF_NAME#v}
           sed -i "s|\"workspace:*\"|\"^$VER\"|g" package.json
-          npm publish --access public
+          if npm view @mrgray17/opentoken-mcp@$VER version &>/dev/null; then
+            echo "mcp@$VER already published, skipping"
+          else
+            npm publish --access public
+          fi
         working-directory: packages/mcp
 
       - name: Publish @mrgray17/opentoken
         run: |
           VER=${GITHUB_REF_NAME#v}
           sed -i "s|\"workspace:*\"|\"^$VER\"|g" package.json
-          npm publish --access public
+          if npm view @mrgray17/opentoken@$VER version &>/dev/null; then
+            echo "opencode@$VER already published, skipping"
+          else
+            npm publish --access public
+          fi
         working-directory: packages/opencode
 
       - uses: softprops/action-gh-release@v2
