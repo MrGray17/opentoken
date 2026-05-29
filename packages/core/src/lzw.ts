@@ -3,9 +3,9 @@
 // prepends a lightweight dictionary. Fully lossless, zero quality risk.
 // 20-40% savings on repetitive output (stack traces, error logs, test output).
 
-const MIN_SUBSTRING_LEN = 15; // Minimum repeated substring length (chars)
-const MAX_DICT_SIZE = 20; // Maximum dictionary entries
-const MIN_OCCURRENCES = 3; // Minimum times a substring must appear
+const MIN_SUBSTRING_LEN = 8; // Minimum repeated substring length (chars)
+const MAX_DICT_SIZE = 30; // Maximum dictionary entries
+const MIN_OCCURRENCES = 2; // Minimum times a substring must appear
 const MAX_INPUT_LEN = 50_000; // Guard: skip O(n²) search for oversized inputs
 
 interface DictEntry {
@@ -148,7 +148,7 @@ function hasSufficientRepetition(text: string): boolean {
 	// Deem repetitive if ≥5% of sampled positions have a repeated substring.
 	// 5% is a very low bar — for 500 samples, only 25 need to repeat.
 	// This ensures we rarely skip genuinely compressible content.
-	return total > 0 && repeated / total >= 0.05;
+	return total > 0 && repeated / total >= 0.03;
 }
 
 export function compressLZW(text: string): {

@@ -73,8 +73,8 @@ export async function safeStageAsync<T>(
 // LOSSLESS_LINE_THRESHOLD controls entry to lossless stages (ANSI strip, log fold, whitespace).
 // Hard truncation cap stays at SHORT_OUTPUT_THRESHOLD (80) in the generic filter.
 // This split ensures medium outputs (40-80 lines) get cleaned without risk of truncation.
-const LOSSLESS_LINE_THRESHOLD = 40;
-const MAX_OUTPUT_LENGTH = 20000;
+const LOSSLESS_LINE_THRESHOLD = 15;
+const MAX_OUTPUT_LENGTH = 5000;
 
 export function shouldSkipFilter(output: string): boolean {
 	const lines = output.split("\n");

@@ -5,10 +5,10 @@
 // Extended for aggressive matching: longer windows, multi-byte,
 // cross-line sequences, improved savings estimation.
 
-const MIN_SUBSTRING_LEN = 2;
+const MIN_SUBSTRING_LEN = 1;
 const MAX_DICT_SIZE = 80;
 const MIN_REPEATS = 2;
-const MAX_WINDOW = 128;
+const MAX_WINDOW = 512;
 const MAX_INPUT_LEN = 50_000; // Skip compression for very large outputs
 
 interface Repeat {

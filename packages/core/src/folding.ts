@@ -119,9 +119,45 @@ const LOG_K8S_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z?\s/m;
 const LOG_SYSLOG_RE =
 	/^[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\S+\s+\S+/m;
 
+// Collapse non-consecutive identical lines (>=5 occurrences anywhere in output)
+function foldRepeats(content: string): string {
+	const lines = content.split("\n");
+	const counts = new Map<string, number>();
+	for (const line of lines) {
+		const trimmed = line.trim();
+		if (trimmed.length < 4) continue;
+		counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1);
+	}
+
+	const toCollapse = new Set<string>();
+	for (const [line, count] of counts) {
+		if (count >= 5) toCollapse.add(line);
+	}
+
+	if (toCollapse.size === 0) return content;
+
+	const result: string[] = [];
+	const shown = new Set<string>();
+
+	for (const line of lines) {
+		const trimmed = line.trim();
+		if (toCollapse.has(trimmed)) {
+			if (!shown.has(trimmed)) {
+				const count = counts.get(trimmed) ?? 0;
+				result.push(`  ${count} x ${trimmed}`);
+				shown.add(trimmed);
+			}
+		} else {
+			result.push(line);
+		}
+	}
+
+	return result.join("\n");
+}
+
 // Combined diff + log folding
 export function foldDiffAndLogs(content: string): string {
-	let result = content;
+	let result = foldRepeats(content);
 
 	// Detect if content is a diff
 	if (content.includes("diff --git") || content.startsWith("@@")) {
