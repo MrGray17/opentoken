@@ -1,4 +1,3 @@
-import { config } from "./config";
 import { analyzeContent, getCompressionPipeline } from "./router";
 import { logError } from "./utils/errors";
 import { logger } from "./utils/logger";
@@ -106,13 +105,9 @@ export function hasErrors(output: string): boolean {
 }
 
 export function conservativeFilter(original: string, filtered: string): string {
-	if (config.conservativeUseTokens) {
-		const origTokens = safeEstimateTokens(original);
-		const filtTokens = safeEstimateTokens(filtered);
-		if (filtTokens >= origTokens) return original;
-	} else {
-		if (filtered.length >= original.length) return original;
-	}
+	const origTokens = safeEstimateTokens(original);
+	const filtTokens = safeEstimateTokens(filtered);
+	if (filtTokens >= origTokens) return original;
 	return filtered;
 }
 
