@@ -1,7 +1,7 @@
 {
 	"name": "@mrgray17/opentoken-mcp",
 	"version": "2.1.1",
-	"description": "MCP server for OpenToken \u2014 compress tool output via JSON-RPC over stdio",
+	"description": "MCP server for OpenToken — compress tool output via JSON-RPC over stdio",
 	"type": "module",
 	"license": "MIT",
 	"bin": {

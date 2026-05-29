@@ -22,3 +22,11 @@ Bugs.md
 # OS junk
 .DS_Store
 Thumbs.db
+
+# Test/debug artifacts
+chunk_*
+decoded_*
+tmp_*
+.tmp-read/
+.tmp_read/
+_tmp_read/

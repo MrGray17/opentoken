@@ -1,7 +1,7 @@
 {
 	"name": "@mrgray17/opentoken",
 	"version": "2.1.1",
-	"description": "OpenCode plugin for OpenToken \u2014 token-saving companion",
+	"description": "OpenCode plugin for OpenToken — token-saving companion",
 	"type": "module",
 	"license": "MIT",
 	"main": "./dist/plugin.js",
