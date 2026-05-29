@@ -57,13 +57,14 @@ Pipeline routing selects a specialized chain of 10-20 stages based on command co
 ## Features
 
 ### Noise Reduction
-- **Pre-call rewrites** -- suppresses noise *before* execution: adds `--color=never`, `-q`, `-s` flags
+- **Pre-call rewrites** -- 46 patterns suppress noise *before* execution: adds `--quiet`, `--silent`, `-q`, `-s` flags to npm, yarn, cargo, pip, pytest, curl, docker, make, systemctl, git, and more
 - **ANSI stripping** -- removes terminal color codes and control sequences
 - **Thinking block removal** -- strips XML reasoning, monologue, and scratchpad blocks
 - **JSON cleanup** -- removes null, empty, false, and redundant values
 - **Table whitespace minimization** -- strips padding from CLI table output
 - **Path shortening** -- replaces project-root prefixes with relative paths
 - **Directory grouping** -- collapses repeated directory paths in file listings
+- **Table stripping** -- collapses `docker ps`, `docker images`, `df`, `free`, `ps aux` to essential columns only
 
 ### Structural Compression
 - **Diff folding** -- condenses context hunks: `... 14 context lines omitted`
@@ -87,7 +88,7 @@ Pipeline routing selects a specialized chain of 10-20 stages based on command co
 ### Operations
 - **Auto-tuning** -- per-family effectiveness metrics control whether heavy stages run
 - **Cross-call dedup** -- prevents repeated output across tool calls in the same session
-- **10 command families** -- specialized pipelines: git, npm, cargo, docker, pip, make, test, fs, grep, generic
+- **10 command families** -- specialized pipelines: git, npm, cargo, docker, pip, make, test, fs, grep, generic (+ 46 pre-call rewrite patterns)
 - **Stats dashboard** -- session and all-time tracking, per-tool breakdown
 
 
@@ -98,9 +99,9 @@ Pipeline routing selects a specialized chain of 10-20 stages based on command co
 | | OpenToken | RTK | QTK | Caveman | built-in |
 |---|---|---|---|---|---|
 | **Approach** | Full compression engine | CLI proxy | OpenCode plugin | Language mode | Basic truncation |
-| **Token savings** | 50-80% | 60-90% | 60-90% | ~75% (messages) | 20-30% |
+| **Token savings** | 55-90% | 60-90% | 60-90% | ~75% (messages) | 20-30% |
 | **Runtime** | Bun (TS, no build) | Rust binary | Bun/Node | Any LLM | built-in |
-| **Stages** | 35 | ~10 | ~10 | 1 | 1 |
+| **Stages** | 46+ | ~10 | ~10 | 1 | 1 |
 | **Secrets redaction** | yes | -- | -- | -- | -- |
 | **Progressive** | yes | -- | -- | -- | -- |
 | **Reversible** | yes | -- | -- | -- | -- |
@@ -209,7 +210,7 @@ opentoken/
 
 **Bun, with Node.js fallback.** OpenToken targets Bun v1.2+ for native TypeScript execution -- no `tsc`, no `tsup`, no `esbuild`. The core package also works under **Node.js >=18** via a thin `fs-compat.ts` polyfill layer. This means the OpenCode plugin works regardless of whether OpenCode runs on Bun or Node.
 
-**Pipeline architecture.** Each command family (git, npm, cargo, etc.) has a dedicated pipeline of 10-20 stages. A generic pipeline catches everything else. The pipeline router detects the command context from the command string and selects the right chain.
+**Pipeline architecture.** Each command family (git, npm, cargo, docker, etc.) has a dedicated pipeline of 10-20 stages. A generic pipeline catches everything else. 46 pre-call rewrite patterns suppress noise before execution. The pipeline router detects the command context from the command string and selects the right chain.
 
 **Token estimation, not character counting.** The conservative filter estimates BPE token counts rather than measuring raw character length. This correctly accounts for LTSC/LZW markers which are 2 characters but 2 BPE tokens, preventing false negatives.
 
