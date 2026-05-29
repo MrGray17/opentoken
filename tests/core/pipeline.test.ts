@@ -1,7 +1,7 @@
 // OpenToken — Test Suite
 // Validates all 24 layers work correctly
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, afterAll, beforeEach, beforeAll, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +12,7 @@ import {
 	getFamilyEffectiveness,
 	isStageWorthwhile,
 	resetCache,
+	setMetricsDir,
 } from "@mrgray17/opentoken-core/autotune";
 import { filterGeneric } from "@mrgray17/opentoken-core/families/generic";
 import { validateOutputSize } from "@mrgray17/opentoken-core/guards";
@@ -467,12 +468,24 @@ describe("Error Logging", () => {
 	});
 });
 
-const METRICS_FILE = path.join(os.homedir(), ".config", "opentoken", "metrics.jsonl");
+const TEST_METRICS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "opentoken-test-"));
+const TEST_METRICS_FILE = path.join(TEST_METRICS_DIR, "metrics.jsonl");
 
 describe("Autotune — Metrics-Driven Gating", () => {
+	beforeAll(() => {
+		setMetricsDir(TEST_METRICS_DIR);
+	});
+
 	beforeEach(() => {
 		resetCache();
-		try { if (fs.existsSync(METRICS_FILE)) fs.unlinkSync(METRICS_FILE); } catch {}
+		try { if (fs.existsSync(TEST_METRICS_FILE)) fs.unlinkSync(TEST_METRICS_FILE); } catch {}
+	});
+
+	afterAll(() => {
+		resetCache();
+		setMetricsDir(path.join(os.homedir(), ".config", "opentoken"));
+		try { if (fs.existsSync(TEST_METRICS_FILE)) fs.unlinkSync(TEST_METRICS_FILE); } catch {}
+		try { fs.rmdirSync(TEST_METRICS_DIR); } catch {}
 	});
 
 	it("returns 1.0 when no metrics file exists", () => {

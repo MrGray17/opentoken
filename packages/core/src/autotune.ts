@@ -7,9 +7,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const METRICS_DIR = path.join(os.homedir(), ".config", "opentoken");
-const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl");
+let METRICS_DIR = path.join(os.homedir(), ".config", "opentoken");
+let METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl");
 const CACHE_TTL_MS = 60_000;
+
+// Override metrics path (for testing)
+export function setMetricsDir(dir: string): void {
+	METRICS_DIR = dir;
+	METRICS_FILE = path.join(dir, "metrics.jsonl");
+}
 
 interface FamilyMetrics {
 	calls: number;
