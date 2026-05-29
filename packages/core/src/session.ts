@@ -5,6 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getConfigDir } from "./utils/configDir";
+import { fileExists, readTextFile, writeTextFile } from "./utils/fs-compat";
 import { logger } from "./utils/logger";
 import { SessionStore } from "./utils/session-store";
 
@@ -30,9 +31,8 @@ export async function saveSessionSummary(
 ): Promise<void> {
 	try {
 		let existing: SessionSummary | null = null;
-		const file = Bun.file(SESSION_FILE);
-		if (await file.exists()) {
-			existing = JSON.parse(await file.text());
+		if (await fileExists(SESSION_FILE)) {
+			existing = JSON.parse(await readTextFile(SESSION_FILE));
 		}
 
 		const newSummary: SessionSummary = {
@@ -50,7 +50,7 @@ export async function saveSessionSummary(
 		};
 
 		const tempFile = `${SESSION_FILE}.tmp`;
-		await Bun.write(tempFile, JSON.stringify(newSummary, null, 2));
+		await writeTextFile(tempFile, JSON.stringify(newSummary, null, 2));
 		fs.renameSync(tempFile, SESSION_FILE);
 		fs.chmodSync(SESSION_FILE, 0o600);
 	} catch {
@@ -63,10 +63,11 @@ export async function loadSessionSummary(
 	project?: string,
 ): Promise<string | null> {
 	try {
-		const file = Bun.file(SESSION_FILE);
-		if (!(await file.exists())) return null;
+		if (!(await fileExists(SESSION_FILE))) return null;
 
-		const summary: SessionSummary = JSON.parse(await file.text());
+		const summary: SessionSummary = JSON.parse(
+			await readTextFile(SESSION_FILE),
+		);
 
 		// Only load if same project
 		if (project && summary.project !== project) return null;
@@ -199,7 +200,7 @@ export async function writeSessionState(
 
 	try {
 		const tempFile = `${SESSION_FILE}.tmp`;
-		await Bun.write(tempFile, JSON.stringify(summary, null, 2));
+		await writeTextFile(tempFile, JSON.stringify(summary, null, 2));
 		fs.renameSync(tempFile, SESSION_FILE);
 		fs.chmodSync(SESSION_FILE, 0o600);
 	} catch {

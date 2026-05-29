@@ -1,5 +1,6 @@
 import path from "node:path";
 import { getConfigDir } from "./utils/configDir";
+import { fileExists, readTextFile } from "./utils/fs-compat";
 import { logger } from "./utils/logger";
 
 // ─── CONFIGURATION ───
@@ -166,9 +167,11 @@ export function validateConfig(
 export async function loadConfig(directory: string): Promise<void> {
 	try {
 		const configPath = path.join(getConfigDir(), "config.json");
-		const file = Bun.file(configPath);
-		if (await file.exists()) {
-			const raw = JSON.parse(await file.text()) as Partial<OpenTokenConfig>;
+		const exists = await fileExists(configPath);
+		if (exists) {
+			const raw = JSON.parse(
+				await readTextFile(configPath),
+			) as Partial<OpenTokenConfig>;
 			const validated = validateConfig(raw);
 			config = { ...DEFAULT_CONFIG, ...validated };
 		}

@@ -6,6 +6,13 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { getConfigDir } from "./utils/configDir";
+import {
+	fileExists,
+	getFileStat,
+	readTextFile,
+	runCommand,
+	writeTextFile,
+} from "./utils/fs-compat";
 
 const INDEX_DIR = path.join(getConfigDir(), "index");
 
@@ -207,7 +214,7 @@ export async function indexFile(
 
 	// Update file info
 	try {
-		const stat = await Bun.file(filePath).stat();
+		const stat = await getFileStat(filePath);
 		index.files.set(filePath, {
 			mtime: stat.mtimeMs,
 			size: stat.size,
@@ -247,7 +254,7 @@ export async function indexDirectory(
 
 	for (const filePath of codeFiles) {
 		try {
-			const content = await Bun.file(filePath).text();
+			const content = await readTextFile(filePath);
 			const count = await indexFile(filePath, content);
 			filesIndexed++;
 			totalSymbols += count;
@@ -292,7 +299,7 @@ async function findCodeFiles(
 	try {
 		const extPattern = extensions.map((ext) => `-name "*${ext}"`).join(" -o ");
 		const cmd = `find "$1" -type f \\( ${extPattern} \\) -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/dist/*" -not -path "*/build/*" -not -path "*/target/*" -not -path "*/.cache/*" | head -n "$2"`;
-		const result = await Bun.spawn([
+		const result = await runCommand([
 			"bash",
 			"-c",
 			cmd,
@@ -300,8 +307,7 @@ async function findCodeFiles(
 			dirPath,
 			String(maxFiles),
 		]);
-		const output = await new Response(result.stdout).text();
-		files.push(...output.trim().split("\n").filter(Boolean));
+		files.push(...result.stdout.trim().split("\n").filter(Boolean));
 	} catch {
 		// Fallback: simple glob
 	}
@@ -317,7 +323,7 @@ async function saveIndex(): Promise<void> {
 			files: Object.fromEntries(index.files),
 			lastIndexed: index.lastIndexed,
 		};
-		await Bun.write(
+		await writeTextFile(
 			path.join(INDEX_DIR, "symbols.json"),
 			JSON.stringify(indexData, null, 2),
 		);
@@ -330,8 +336,7 @@ async function saveIndex(): Promise<void> {
 export async function loadIndex(): Promise<boolean> {
 	try {
 		const filePath = path.join(INDEX_DIR, "symbols.json");
-		const file = Bun.file(filePath);
-		if (!(await file.exists())) return false;
+		if (!(await fileExists(filePath))) return false;
 
 		const indexData = JSON.parse(await file.text());
 		index.symbols = new Map(Object.entries(indexData.symbols || {}));

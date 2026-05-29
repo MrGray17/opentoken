@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { getConfigDir } from "./utils/configDir";
+import { writeTextFile } from "./utils/fs-compat";
 import { logger } from "./utils/logger";
 import { SessionStore } from "./utils/session-store";
 
@@ -77,7 +78,7 @@ export async function compressAndStore(
 	};
 
 	try {
-		await Bun.write(path.join(REWIND_DIR, `${id}.txt`), content);
+		await writeTextFile(path.join(REWIND_DIR, `${id}.txt`), content);
 	} catch {
 		logger.warn(
 			sessionID,

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { atomicWriteFileAsync, atomicWriteFileSync } from "./atomic-write";
 import { getConfigDir } from "./configDir";
+import { fileExists } from "./fs-compat";
 
 const SESSION_START_FILE = path.join(getConfigDir(), "session-start.json");
 
@@ -30,8 +31,7 @@ export async function writeSessionStartFileAsync(
 
 export async function ensureSessionStartFile(sessionID: string): Promise<void> {
 	try {
-		const f = Bun.file(SESSION_START_FILE);
-		if (!(await f.exists())) {
+		if (!(await fileExists(SESSION_START_FILE))) {
 			await writeSessionStartFileAsync(sessionID);
 		}
 	} catch {

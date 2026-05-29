@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getConfigDir } from "./utils/configDir";
+import { fileExists, writeTextFile } from "./utils/fs-compat";
 import { logger } from "./utils/logger";
 import { SessionStore } from "./utils/session-store";
 
@@ -44,7 +45,7 @@ let _dirKnownExists = false;
 async function ensureDir(): Promise<void> {
 	if (_dirKnownExists) return;
 	try {
-		const dirExists = await Bun.file(OFFLOAD_DIR).exists();
+		const dirExists = await fileExists(OFFLOAD_DIR);
 		if (!dirExists) {
 			fs.mkdirSync(OFFLOAD_DIR, { recursive: true });
 		}
@@ -147,7 +148,7 @@ export async function progressiveDisclosure(
 	const filePath = path.join(OFFLOAD_DIR, `${id}.txt`);
 
 	try {
-		await Bun.write(filePath, content);
+		await writeTextFile(filePath, content);
 	} catch {
 		logger.warn(
 			sessionID,

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { writeTextFile } from "./fs-compat";
 
 // Atomic file write: write to .tmp, set permissions, then rename into place
 // Prevents partial writes from being observed by concurrent readers
@@ -21,7 +22,7 @@ export async function atomicWriteFileAsync(
 	mode: number = 0o600,
 ): Promise<void> {
 	const tmp = `${filePath}.tmp`;
-	await Bun.write(tmp, data);
+	await writeTextFile(tmp, data);
 	fs.chmodSync(tmp, mode);
 	fs.renameSync(tmp, filePath);
 	fs.chmodSync(filePath, mode);
