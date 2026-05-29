@@ -115,7 +115,7 @@ Pipeline routing selects a specialized chain of 10-20 stages based on command co
 
 ## Quick Start
 
-Requires **Bun v1.2+**. [Install Bun](https://bun.sh).
+**Bun v1.2+** recommended. Core also works under **Node.js >=18** via the fs-compat polyfill. [Install Bun](https://bun.sh).
 
 ```bash
 npm i -g @mrgray17/opentoken     # OpenCode plugin (auto-loads, zero config)
@@ -146,7 +146,7 @@ Works with zero configuration. Optional overrides at `~/.config/opentoken/config
 }
 ```
 
-See [AGENTS.md](./AGENTS.md) for all config fields and defaults.
+See [AGENTS.md](https://github.com/MrGray17/opentoken/blob/main/AGENTS.md) for all config fields and defaults.
 
 ---
 
@@ -177,7 +177,7 @@ See [AGENTS.md](./AGENTS.md) for all config fields and defaults.
 ```
 opentoken/
   packages/
-    core/src/              # Universal compression engine (51 files)
+    core/src/              # Universal compression engine (53 files)
       transform.ts           # Entry: transformToolOutput()
       precall.ts             # Command rewriting, minified file blocking
       postcall.ts            # Normalize, fold, minify, strip
@@ -192,7 +192,7 @@ opentoken/
       families/              # 10 command-family output filters
       filters/               # 3 tool-specific output filters
       pipelines/             # 4 tool pipelines + shared utilities
-      utils/                 # Cache, errors, logger, metrics, secrets, tokens
+      utils/                 # 11 utilities (cache, configDir, errors, fs-compat, etc.)
     cli/src/                 # CLI binary (~260 lines)
     mcp/src/                 # MCP JSON-RPC server
     opencode/src/            # OpenCode plugin adapter (~140 lines)
@@ -207,7 +207,7 @@ opentoken/
 
 **0-risk principle.** Every compression stage is followed by a conservative filter that compares estimated token counts. If a stage produced MORE tokens than its input consumed, the original output is returned untouched. This guarantees compression can never regress quality.
 
-**Bun, not Node.** OpenToken targets Bun v1.2+ exclusively. Bun runs TypeScript natively -- no `tsc`, no `tsup`, no `esbuild`, no source maps. One command: `bun run src/cli.ts`. This eliminates an entire build toolchain.
+**Bun, with Node.js fallback.** OpenToken targets Bun v1.2+ for native TypeScript execution -- no `tsc`, no `tsup`, no `esbuild`. The core package also works under **Node.js >=18** via a thin `fs-compat.ts` polyfill layer. This means the OpenCode plugin works regardless of whether OpenCode runs on Bun or Node.
 
 **Pipeline architecture.** Each command family (git, npm, cargo, etc.) has a dedicated pipeline of 10-20 stages. A generic pipeline catches everything else. The pipeline router detects the command context from the command string and selects the right chain.
 
@@ -233,7 +233,7 @@ CI workflow: `typecheck` -> `lint` -> `checks:regex` -> `test`.
 
 Tests import from workspace packages: `@mrgray17/opentoken-core` for core tests, `@mrgray17/opentoken` for plugin tests. No build step -- Bun resolves workspace packages natively.
 
-See [AGENTS.md](./AGENTS.md) and [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed developer documentation.
+See [AGENTS.md](https://github.com/MrGray17/opentoken/blob/main/AGENTS.md) for developer documentation. Issues and PRs: [GitHub Issues](https://github.com/MrGray17/opentoken/issues).
 
 ---
 
