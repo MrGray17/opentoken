@@ -22,19 +22,23 @@ import { convertToTOON } from "../toon";
 import { getCachedRead, setCachedRead } from "../utils/cache";
 import { redactSecrets } from "../utils/secrets";
 import {
+	routeContent,
+	safeStage,
+	safeStageAsync,
+	shouldSkipFilter,
+} from "../wrappers";
+import {
 	aliasJsonKeys,
 	cleanWhitespaceAndNulls,
 	conservativeFilter,
 	detectAndHandleBinary,
 	foldRepeatedLines,
+	groupByDirectory,
 	minifyJSON,
 	minimizeTableWhitespace,
 	normalizeLogNoise,
 	normalizeWhitespace,
-	routeContent,
-	safeStage,
-	safeStageAsync,
-	shouldSkipFilter,
+	shortenPaths,
 	stripAnsi,
 	stripThinkingBlocks,
 	suppressOversized,
@@ -90,6 +94,16 @@ export async function applyBashFilter(
 	output = safeStage(
 		"normalizeWhitespace",
 		() => normalizeWhitespace(output),
+		output,
+	);
+
+	// File path shortening — strip project root prefixes
+	output = safeStage("shortenPaths", () => shortenPaths(output), output);
+
+	// Directory grouping — collapse repeated file paths
+	output = safeStage(
+		"groupByDirectory",
+		() => groupByDirectory(output),
 		output,
 	);
 

@@ -13,6 +13,81 @@
 // #32: ANSI escape sequence stripping — zero risk
 // Strips color codes, cursor movements, and terminal control sequences
 // that tokenizers count as real tokens but carry zero semantic value
+// #35: JSON cleanup — remove null/empty values, deduplicate repeated values
+export function cleanJsonValues(text: string): string {
+	// Remove entire key-value pairs where value is null, empty, false or 0
+	text = text.replace(/"[^"]+"\s*:\s*(null|""|"\[\]")/g, "");
+	text = text.replace(/"[^"]+"\s*:\s*(false|0|\[\]|\{\})/g, "");
+	// Clean up double commas and trailing commas
+	text = text.replace(/,\s*,/g, ",");
+	text = text.replace(/,\s*}/g, "}");
+	text = text.replace(/\{\s*,/g, "{");
+	return text;
+}
+
+// #33: File path shortening — strip common project root prefixes
+// /home/user/project/src/foo/bar.ts → src/foo/bar.ts
+let _projectRoot = "";
+export function setProjectRoot(root: string): void {
+	_projectRoot = root.endsWith("/") ? root.slice(0, -1) : root;
+}
+
+export function shortenPaths(text: string): string {
+	if (!_projectRoot || _projectRoot.length < 4) return text;
+	const rootPrefix = _projectRoot + "/";
+	const lines = text.split("\n");
+	const result: string[] = [];
+	for (const line of lines) {
+		result.push(line.split(rootPrefix).join("./"));
+	}
+	return result.join("\n");
+}
+
+// #34: Directory grouping — collapse repeated file paths in listings
+// src/a.ts\nsrc/b.ts\nsrc/c.ts → src/ (3 files): a.ts, b.ts, c.ts
+export function groupByDirectory(text: string): string {
+	const lines = text.split("\n");
+	if (lines.length < 3) return text;
+
+	// Match lines that contain file paths
+	const pathPattern = /^\s*([^\s]+\/[^\s]+)/;
+	const dirs = new Map<string, string[]>();
+
+	for (const line of lines) {
+		const m = line.match(pathPattern);
+		if (!m) continue;
+		const fullPath = m[1];
+		const lastSlash = fullPath.lastIndexOf("/");
+		if (lastSlash === -1) continue;
+		const dir = fullPath.slice(0, lastSlash);
+		const file = fullPath.slice(lastSlash + 1);
+		if (!dirs.has(dir)) dirs.set(dir, []);
+		const bucket = dirs.get(dir);
+		if (bucket) bucket.push(file);
+	}
+
+	// Only group directories with 3+ files
+	let grouped = text;
+	for (const [dir, files] of dirs) {
+		if (files.length < 3) continue;
+		const summary = `${dir}/ (${files.length} files): ${files.join(", ")}`;
+		// Replace first occurrence of each file in this dir with the summary
+		let first = true;
+		for (const f of files) {
+			const fullPath = dir + "/" + f;
+			if (first) {
+				grouped = grouped.split(fullPath).join(summary);
+				first = false;
+			} else {
+				grouped = grouped.split(fullPath).join("");
+			}
+		}
+	}
+
+	// Clean up double spaces and empty lines
+	return grouped.replace(/ {2,}/g, " ").replace(/\n\n\n+/g, "\n\n");
+}
+
 export function stripAnsi(text: string): string {
 	return text.replace(
 		/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g,

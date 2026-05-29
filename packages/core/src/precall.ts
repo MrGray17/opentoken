@@ -181,6 +181,39 @@ const COMMAND_REWRITES: { match: RegExp; rewrite: (cmd: string) => string }[] =
 				return `${cmd} -no-color`;
 			},
 		},
+		// git status → short format
+		{
+			match: /^git\s+status(?!\s+-[sb])/,
+			rewrite: (cmd) => {
+				if (cmd.includes("-s") || cmd.includes("-b") || cmd.includes("--short"))
+					return cmd;
+				return `${cmd} -s`;
+			},
+		},
+		// npm/yarn ls → limit depth
+		{
+			match: /^(npm|yarn)\s+ls/,
+			rewrite: (cmd) => {
+				if (cmd.includes("--depth")) return cmd;
+				return `${cmd} --depth=0`;
+			},
+		},
+		// grep → strip ANSI
+		{
+			match: /^grep\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes("--color")) return cmd;
+				return `${cmd} --color=never`;
+			},
+		},
+		// go test → verbose (test names only, fewer tokens than raw)
+		{
+			match: /^go\s+test\s/,
+			rewrite: (cmd) => {
+				if (cmd.includes("-v")) return cmd;
+				return cmd.replace(/^(go\s+test)/, "$1 -v");
+			},
+		},
 		// (make and go test rewrites removed — they caused silent data loss)
 		// brew → add -q
 		{
